@@ -65,7 +65,7 @@ async function renderDashboard() {
       </section>
     `);
   } catch (e) {
-    show(`<div class="panel"><p class="muted">Error: ${e.message}</p></div>`);
+    show(`<div class="panel"><p class="muted">Error: ${escHtml(e.message)}</p></div>`);
   }
 }
 
@@ -76,7 +76,7 @@ async function renderMesas() {
   try {
     const mesas = await fetchJson('/api/mesas');
     const cards = mesas.map(m => `
-      <div class="card" style="cursor:pointer" onclick="abrirOrden(${m.id},'${escHtml(m.nombre)}')">
+      <div class="card" style="cursor:pointer" data-mesa-id="${m.id}" data-mesa-nombre="${escHtml(m.nombre)}" onclick="abrirOrdenEvt(this)">
         <h3>${escHtml(m.nombre)}</h3>
         <span class="badge">${escHtml(m.status)}</span>
       </div>`).join('');
@@ -90,7 +90,7 @@ async function renderMesas() {
       </section>
     `);
   } catch (e) {
-    show(`<div class="panel"><p class="muted">Error: ${e.message}</p></div>`);
+    show(`<div class="panel"><p class="muted">Error: ${escHtml(e.message)}</p></div>`);
   }
 }
 
@@ -100,6 +100,19 @@ async function nuevaMesa() {
   await postJson('/api/mesas', { nombre });
   renderMesas();
 }
+
+
+window.abrirOrdenEvt = function(el) {
+  const id = Number(el.dataset.mesaId);
+  const nombre = el.dataset.mesaNombre || '';
+  window.abrirOrden(id, nombre);
+};
+
+window.confirmarOrdenEvt = function(el) {
+  const id = Number(el.dataset.mesaId);
+  const nombre = el.dataset.mesaNombre || '';
+  window.confirmarOrden(id, nombre);
+};
 
 window.abrirOrden = async function(mesaId, mesaNombre) {
   const items = await fetchJson('/api/menu').catch(() => []);
@@ -115,7 +128,7 @@ window.abrirOrden = async function(mesaId, mesaNombre) {
       </div>
       <table id="orderItems"><tr><th>Item</th><th>Precio</th><th>Cant</th><th></th></tr></table>
       <div class="row" style="margin-top:1rem">
-        <button onclick="confirmarOrden(${mesaId},'${escHtml(mesaNombre)}')">Confirmar orden</button>
+        <button id="btnConfirmar" data-mesa-id="${mesaId}" data-mesa-nombre="${escHtml(mesaNombre)}" onclick="confirmarOrdenEvt(this)">Confirmar orden</button>
         <button onclick="renderMesas()">Cancelar</button>
       </div>
     </section>
@@ -188,7 +201,7 @@ async function renderOrdenes() {
       </section>
     `);
   } catch (e) {
-    show(`<div class="panel"><p class="muted">Error: ${e.message}</p></div>`);
+    show(`<div class="panel"><p class="muted">Error: ${escHtml(e.message)}</p></div>`);
   }
 }
 
@@ -213,7 +226,7 @@ async function renderMenu() {
     window._menuItems = items;
     renderMenuTable(items);
   } catch (e) {
-    show(`<div class="panel"><p class="muted">Error: ${e.message}</p></div>`);
+    show(`<div class="panel"><p class="muted">Error: ${escHtml(e.message)}</p></div>`);
   }
 }
 
@@ -344,7 +357,7 @@ async function renderInventario() {
       </section>
     `);
   } catch (e) {
-    show(`<div class="panel"><p class="muted">Error: ${e.message}</p></div>`);
+    show(`<div class="panel"><p class="muted">Error: ${escHtml(e.message)}</p></div>`);
   }
 }
 
@@ -449,7 +462,7 @@ async function renderReportes() {
       </section>
     `);
   } catch (e) {
-    show(`<div class="panel"><p class="muted">Error: ${e.message}</p></div>`);
+    show(`<div class="panel"><p class="muted">Error: ${escHtml(e.message)}</p></div>`);
   }
 }
 
@@ -480,7 +493,7 @@ async function renderStaff() {
       </section>
     `);
   } catch (e) {
-    show(`<div class="panel"><p class="muted">Error: ${e.message}</p></div>`);
+    show(`<div class="panel"><p class="muted">Error: ${escHtml(e.message)}</p></div>`);
   }
 }
 
@@ -538,7 +551,7 @@ async function route() {
     if (h === 'staff') return await renderStaff();
     return await renderDashboard();
   } catch (e) {
-    show(`<div class="panel"><p class="muted">Error inesperado: ${e.message}</p></div>`);
+    show(`<div class="panel"><p class="muted">Error inesperado: ${escHtml(e.message)}</p></div>`);
   }
 }
 
