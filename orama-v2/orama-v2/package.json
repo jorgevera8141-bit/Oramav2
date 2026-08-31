@@ -1,0 +1,15 @@
+{
+  "name": "orama-server-v2",
+  "version": "2.0.0",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "seed": "node src/seeds/seed-menu.pg.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pg": "^8.22.0",
+    "zod": "^3.23.8"
+  }
+}
