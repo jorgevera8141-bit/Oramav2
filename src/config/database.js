@@ -7,12 +7,12 @@ const pool = new Pool({
   max: Number(process.env.PG_POOL_MAX || 10),
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
+  options: '-c timezone=UTC',
   ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway')
     ? { rejectUnauthorized: false }
     : undefined
 });
 
-pool.on('connect', (client) => client.query("SET TIME ZONE 'UTC'"));
 pool.on('error', (error) => console.error('Unexpected PostgreSQL pool error', error));
 
 module.exports = pool;
