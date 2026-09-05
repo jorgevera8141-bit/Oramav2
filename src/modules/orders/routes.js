@@ -1,6 +1,8 @@
 const express = require('express');
 const pool = require('../../config/database');
 const { closeOrder } = require('./service');
+const { validate } = require('../../middleware/validate');
+const { cerrarSchema } = require('./schemas');
 
 const router = express.Router();
 
@@ -49,7 +51,7 @@ router.post('/ordenes', async (req, res) => {
   }
 });
 
-router.put('/ordenes/:id/cerrar', async (req, res) => {
+router.put('/ordenes/:id/cerrar', validate(cerrarSchema), async (req, res) => {
   const orden = await closeOrder(Number(req.params.id), req.body || {});
   res.json({ success: true, orden });
 });
