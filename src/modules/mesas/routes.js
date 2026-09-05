@@ -5,7 +5,7 @@ const router = express.Router();
 
 router.get('/mesas', async (_req, res) => {
   const { rows } = await pool.query('SELECT * FROM mesas ORDER BY id ASC');
-  res.json(rows);
+  res.json({ success: true, mesas: rows });
 });
 
 router.post('/mesas', async (req, res) => {
@@ -14,20 +14,20 @@ router.post('/mesas', async (req, res) => {
     'INSERT INTO mesas (nombre, status) VALUES ($1, COALESCE($2, \'disponible\')) RETURNING *',
     [nombre, status]
   );
-  res.status(201).json(rows[0]);
+  res.status(201).json({ success: true, mesa: rows[0] });
 });
 
 router.get('/mesas/status', async (_req, res) => {
   const { rows } = await pool.query(
     'SELECT status, COUNT(*)::int AS count FROM mesas GROUP BY status ORDER BY status'
   );
-  res.json(rows);
+  res.json({ success: true, status: rows });
 });
 
 router.post('/seed', async (_req, res) => {
   const seedMenu = require('../../seeds/seed-menu.pg');
   const result = await seedMenu();
-  res.json(result);
+  res.json({ success: true, ...result });
 });
 
 module.exports = router;

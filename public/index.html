@@ -1,31 +1,30 @@
 <!doctype html>
-<html lang="es">
+<html lang="es-MX">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Orama v2.0 - Café Rosinal</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/orama-pro.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0F0D0B">
+  <title>Orama Café | POS</title>
+  <link rel="stylesheet" href="/css/orama-pro.css">
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <h1>Orama v2.0</h1>
-      <p>Café Rosinal</p>
-    </div>
-    <nav class="nav">
-      <a href="#dashboard">Dashboard</a>
-      <a href="#mesas">Mesas</a>
-      <a href="#ordenes">Órdenes</a>
-      <a href="#menu">Menú</a>
-      <a href="#inventario">Inventario</a>
-      <a href="#reportes">Reportes</a>
-      <a href="#staff">Staff</a>
+  <header class="site-header">
+    <a class="logo-link" href="#dashboard" aria-label="Orama Café, ir al dashboard">
+      <svg class="logo" viewBox="0 0 250 72" role="img" aria-labelledby="logo-title logo-desc">
+        <title id="logo-title">Orama Café</title><desc id="logo-desc">Taza de café con vapor, arcos decorativos y el nombre Orama Café</desc>
+        <g class="logo-steam" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.5"><path d="M111 12c-7 5-7 9 0 14s7 9 0 14"/><path d="M125 8c-7 5-7 9 0 14s7 9 0 14"/><path d="M139 12c-7 5-7 9 0 14s7 9 0 14"/></g>
+        <g class="logo-cup" fill="none" stroke="currentColor" stroke-width="2"><path d="M101 40h48l-4 12c-2 5-7 8-20 8s-18-3-20-8z"/><path d="M149 43h8c9 0 9 12 0 13h-10"/><ellipse cx="125" cy="61" rx="31" ry="4"/></g>
+        <path class="logo-arc" d="M16 37c18-13 34-15 51-11M234 37c-18-13-34-15-51-11"/>
+        <text class="logo-word" x="125" y="34" text-anchor="middle">ORAMA</text><ellipse class="logo-bean" cx="77" cy="24" rx="4" ry="7" transform="rotate(-25 77 24)"/><path class="logo-bean-line" d="M75 19c4 3 4 7 2 10"/>
+        <path class="logo-dash" d="M45 70h35M170 70h35"/><text class="logo-cafe" x="125" y="72" text-anchor="middle">CAFÉ</text>
+      </svg>
+    </a>
+    <nav class="main-nav" aria-label="Navegación principal">
+      <a href="#dashboard" data-route="dashboard">Resumen</a><a href="#mesas" data-route="mesas">Mesas</a><a href="#ordenes" data-route="ordenes">Órdenes</a><a href="#menu" data-route="menu">Menú</a><a href="#inventario" data-route="inventario">Inventario</a><a href="#reportes" data-route="reportes">Reportes</a><a href="#staff" data-route="staff">Staff</a>
     </nav>
+    <div class="header-status"><span class="status-dot"></span><span>Operación normal</span></div>
   </header>
-  <main id="app" class="app"></main>
-  <script src="/js/orama-app.js"></script>
+  <main id="app" aria-live="polite" aria-busy="true"></main>
+  <script src="/js/orama-app.js" defer></script>
 </body>
 </html>

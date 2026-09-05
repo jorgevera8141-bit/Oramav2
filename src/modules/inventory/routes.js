@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.get('/inventory', async (_req, res) => {
   const { rows } = await pool.query('SELECT * FROM inventory_items ORDER BY id ASC');
-  res.json(rows);
+  res.json({ success: true, inventory: rows });
 });
 
 router.post('/inventory', async (req, res) => {
@@ -17,7 +17,7 @@ router.post('/inventory', async (req, res) => {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [b.name, b.unit || 'pieza', b.current_stock || 0, b.reorder_threshold || 0, b.reorder_quantity || 0, b.cost_per_unit || 0, b.supplier_name, b.supplier_contact]
   );
-  res.status(201).json(rows[0]);
+  res.status(201).json({ success: true, item: rows[0] });
 });
 
 router.put('/inventory/:id', async (req, res) => {
@@ -35,7 +35,7 @@ router.put('/inventory/:id', async (req, res) => {
      WHERE id = $9 RETURNING *`,
     [b.name, b.unit, b.current_stock, b.reorder_threshold, b.reorder_quantity, b.cost_per_unit, b.supplier_name, b.supplier_contact, Number(req.params.id)]
   );
-  res.json(rows[0] || null);
+  res.json({ success: true, item: rows[0] || null });
 });
 
 router.delete('/inventory/:id', async (req, res) => {
@@ -55,7 +55,7 @@ router.post('/inventory/:id/restock', async (req, res) => {
       [id, amount, 'Manual restock']
     );
     await client.query('COMMIT');
-    res.json({ ok: true });
+    res.json({ success: true });
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
@@ -66,19 +66,19 @@ router.post('/inventory/:id/restock', async (req, res) => {
 
 router.post('/inventory/request-restock', async (req, res) => {
   await notify(process.env.NTFY_LOW_STOCK_TOPIC || 'orama-low-stock', 'Restock requested', 'Low stock alert');
-  res.json({ ok: true });
+  res.json({ success: true, message: 'Solicitud de reabasto enviada' });
 });
 
 router.get('/inventory/low-stock-count', async (_req, res) => {
   const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM inventory_items WHERE current_stock <= reorder_threshold');
-  res.json(rows[0]);
+  res.json({ success: true, count: rows[0]?.count || 0 });
 });
 
 router.get('/inventory/shopping-list', async (_req, res) => {
   const { rows } = await pool.query(
     'SELECT * FROM inventory_items WHERE current_stock <= reorder_threshold ORDER BY current_stock ASC'
   );
-  res.json(rows);
+  res.json({ success: true, items: rows });
 });
 
 module.exports = router;

@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.get('/menu', async (_req, res) => {
   const { rows } = await pool.query('SELECT * FROM menu_items ORDER BY id ASC');
-  res.json(rows);
+  res.json({ success: true, menu: rows });
 });
 
 router.post('/menu/nuevo', async (req, res) => {
@@ -24,7 +24,7 @@ router.post('/menu/nuevo', async (req, res) => {
     'INSERT INTO menu_items (nombre, categoria, precio, activo, clave, clave_sat) VALUES ($1, $2, $3, COALESCE($4, 1), COALESCE($5, \'\'), COALESCE($6, \'\')) RETURNING *',
     [data.nombre, data.categoria, data.precio, data.activo, data.clave, data.clave_sat]
   );
-  res.status(201).json(rows[0]);
+  res.status(201).json({ success: true, item: rows[0] });
 });
 
 router.put('/menu/:id', async (req, res) => {
@@ -42,7 +42,7 @@ router.put('/menu/:id', async (req, res) => {
      RETURNING *`,
     [nombre, categoria, precio, activo, clave, clave_sat, id]
   );
-  res.json(rows[0] || null);
+  res.json({ success: true, item: rows[0] || null });
 });
 
 router.delete('/menu/:id', async (req, res) => {

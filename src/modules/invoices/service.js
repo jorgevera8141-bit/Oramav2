@@ -43,13 +43,17 @@ function postJson(urlString, body, headers = {}) {
 }
 
 async function createInvoice({ orden_id, rfc_receptor, razon_social, total }) {
-  const idempotencyKey = `orden-${orden_id}-${Date.now()}`;
+  const idempotencyKey = `orden-${orden_id}`;
   const apiUrl = process.env.FACTURAPI_URL || 'https://facturapi.io/api/v1/invoices';
   const result = await postJson(
     apiUrl,
     { orden_id, rfc_receptor, razon_social, total },
     { Authorization: `Bearer ${process.env.FACTURAPI_KEY || ''}`, 'Idempotency-Key': idempotencyKey }
   );
+
+  if (result.statusCode < 200 || result.statusCode >= 300 || !result.body) {
+    throw Object.assign(new Error('FacturAPI no pudo crear la factura'), { statusCode: 502 });
+  }
 
   const { rows } = await pool.query(
     `INSERT INTO orama_facturas (orden_id, folio_fiscal, facturapi_id, rfc_receptor, razon_social, total, status, pdf_url, xml_url)

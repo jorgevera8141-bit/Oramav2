@@ -3,7 +3,7 @@ const path = require('path');
 const pool = require('../config/database');
 
 async function seedMenu() {
-  const filePath = path.join(process.cwd(), 'orama-v2', 'seed_with_codes.json');
+  const filePath = path.join(__dirname, '..', '..', '..', 'seed_with_codes.json');
   const raw = fs.readFileSync(filePath, 'utf8');
   const items = JSON.parse(raw);
   let counter = 1;
@@ -21,7 +21,7 @@ async function seedMenu() {
     );
   }
 
-  return { ok: true, count: items.length };
+  return { success: true, count: items.length };
 }
 
 module.exports = seedMenu;

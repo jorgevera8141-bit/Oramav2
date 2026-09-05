@@ -1,5 +1,4 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const pool = require('./config/database');
 
@@ -25,6 +24,11 @@ app.use('/api', inventoryRoutes);
 app.use('/api', invoicesRoutes);
 app.use('/api', reportsRoutes);
 app.use('/api', staffRoutes);
+
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : 'Error interno del servidor' });
+});
 
 async function initDb() {
   await pool.query(`CREATE TABLE IF NOT EXISTS mesas (
@@ -137,6 +141,7 @@ async function initDb() {
   await pool.query('CREATE INDEX IF NOT EXISTS idx_inv_mov_reason ON inventory_movements(reason)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_inv_mov_order ON inventory_movements(order_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_recipe_menu ON recipe_items(menu_item_id)');
+  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_facturas_orden ON orama_facturas(orden_id)');
   await pool.query(`CREATE OR REPLACE FUNCTION mx(ts timestamp) RETURNS timestamp AS $$ SELECT ts AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City' $$ LANGUAGE sql STABLE;`);
   await pool.query(`INSERT INTO orama_settings (key, value) VALUES ('margin_threshold_pct', '70') ON CONFLICT DO NOTHING`);
 }
