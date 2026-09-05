@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0F0D0B">
   <title>Orama Café | POS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Playfair+Display:wght@600;700&display=swap">
   <link rel="stylesheet" href="/css/orama-pro.css">
 </head>
 <body>
@@ -22,7 +25,7 @@
     <nav class="main-nav" aria-label="Navegación principal">
       <a href="#dashboard" data-route="dashboard">Resumen</a><a href="#mesas" data-route="mesas">Mesas</a><a href="#ordenes" data-route="ordenes">Órdenes</a><a href="#menu" data-route="menu">Menú</a><a href="#inventario" data-route="inventario">Inventario</a><a href="#reportes" data-route="reportes">Reportes</a><a href="#staff" data-route="staff">Staff</a>
     </nav>
-    <div class="header-status"><span class="status-dot"></span><span>Operación normal</span></div>
+    <div class="header-status"><span class="status-dot" aria-hidden="true"></span><span>Operación normal</span></div>
   </header>
   <main id="app" aria-live="polite" aria-busy="true"></main>
   <script src="/js/orama-app.js" defer></script>
