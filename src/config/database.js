@@ -1,4 +1,4 @@
-process.loadEnvFile();
+try { process.loadEnvFile(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 
 const { Pool } = require('pg');
 
