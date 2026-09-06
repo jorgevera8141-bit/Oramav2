@@ -1,24 +1,12 @@
 const express = require('express');
 const pool = require('../../config/database');
 const { validate } = require('../../middleware/validate');
-const { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema } = require('./schemas');
+const { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema, previewSchema } = require('./schemas');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { hasWindowStarted, toDateString } = require('./engine');
+const { sweepPromotionLifecycle, getActivePromotions, priceItems } = require('./service');
 
 const router = express.Router();
-
-async function sweepPromotionLifecycle() {
-  await pool.query(`
-    UPDATE promociones SET estado = 'ACTIVE', updated_at = now()
-    WHERE estado = 'SCHEDULED'
-      AND (fecha_inicio < CURRENT_DATE OR (fecha_inicio = CURRENT_DATE AND (hora_inicio IS NULL OR hora_inicio <= CURRENT_TIME)))
-  `);
-  await pool.query(`
-    UPDATE promociones SET estado = 'EXPIRED', updated_at = now()
-    WHERE estado = 'ACTIVE'
-      AND (fecha_fin < CURRENT_DATE OR (fecha_fin = CURRENT_DATE AND hora_fin IS NOT NULL AND hora_fin < CURRENT_TIME))
-  `);
-}
 
 async function getStaffTipo(nombre) {
   const { rows } = await pool.query('SELECT tipo FROM staff WHERE nombre = $1', [nombre]);
@@ -40,6 +28,16 @@ router.get('/promotions', async (req, res) => {
     ? await pool.query('SELECT * FROM promociones WHERE estado = $1 ORDER BY created_at DESC', [estado])
     : await pool.query('SELECT * FROM promociones ORDER BY created_at DESC');
   res.json({ success: true, promociones: rows });
+});
+
+router.get('/promotions/active', async (_req, res) => {
+  const promociones = await getActivePromotions();
+  res.json({ success: true, promociones });
+});
+
+router.post('/promotions/preview', validate(previewSchema), async (req, res) => {
+  const pricing = await priceItems(req.body.items);
+  res.json({ success: true, ...pricing });
 });
 
 router.get('/promotions/:id', async (req, res) => {

@@ -44,3 +44,5 @@
 .promo-review-detail{padding:14px 16px;margin-bottom:12px;border-radius:10px;background:rgba(0,0,0,.18);border:1px solid var(--line)}
 .promo-review-detail h3{margin:0 0 4px}
 .promo-review-detail p{margin:4px 0}
+.cart-item-row.promo-row .cart-item-name{color:var(--teal);font-style:italic}
+.cart-item-row.promo-row .cart-item-price{color:var(--teal)}

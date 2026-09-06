@@ -61,4 +61,13 @@ const reviewActionSchema = pinActionSchema.extend({
   message: 'Se requiere una nota explicando los cambios solicitados', path: ['nota']
 });
 
-module.exports = { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema };
+const cartItemSchema = z.object({
+  menu_item_id: z.number().int().positive(),
+  cantidad: z.number().int().positive()
+});
+
+const previewSchema = z.object({
+  items: z.array(cartItemSchema).min(1)
+});
+
+module.exports = { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema, cartItemSchema, previewSchema };

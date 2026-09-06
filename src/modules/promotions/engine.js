@@ -33,10 +33,15 @@ function hasWindowStarted(promo, now) {
   return !promo.hora_inicio || promo.hora_inicio <= time;
 }
 
+function remainingBudget(promo, redemptionCounts) {
+  if (promo.limite_unidades == null) return Infinity;
+  return Math.max(0, promo.limite_unidades - (redemptionCounts[promo.id] || 0));
+}
+
 function isPromotionEligible(promo, now, redemptionCounts) {
   if (promo.estado !== 'ACTIVE') return false;
   if (!isWithinWindow(promo, now)) return false;
-  if (promo.limite_unidades != null && (redemptionCounts[promo.id] || 0) >= promo.limite_unidades) return false;
+  if (remainingBudget(promo, redemptionCounts) <= 0) return false;
   return true;
 }
 
@@ -89,6 +94,7 @@ function applyPromotions({ items, promotions, now = new Date(), redemptionCounts
   const aplicadas = [];
 
   for (const promo of eligible) {
+    const budget = remainingBudget(promo, redemptionCounts);
     if (promo.tipo === 'precio_fijo') {
       const scopeIds = Array.isArray(promo.producto_ids) ? promo.producto_ids : [];
       if (!scopeIds.length) continue;
@@ -105,19 +111,24 @@ function applyPromotions({ items, promotions, now = new Date(), redemptionCounts
         outputLines.push(...splitLine(l, 1, share, promo));
         l.unclaimed -= 1;
       });
-      aplicadas.push({ promocion_id: promo.id, nombre: promo.nombre, descuento: totalDiscount });
+      aplicadas.push({ promocion_id: promo.id, nombre: promo.nombre, descuento: totalDiscount, unidades: 1 });
     } else if (promo.tipo === 'descuento_porcentaje') {
+      let remaining = budget;
       const matches = working.filter((l) => matchesScope(promo, l) && l.unclaimed > 0);
-      if (!matches.length) continue;
+      if (!matches.length || remaining <= 0) continue;
       let promoDiscountTotal = 0;
+      let unidadesUsadas = 0;
       matches.forEach((l) => {
-        const qty = l.unclaimed;
+        if (remaining <= 0) return;
+        const qty = Math.min(l.unclaimed, remaining);
         const descuentoUnitario = round2(Number(l.precio) * (Number(promo.porcentaje_descuento) / 100));
         outputLines.push(...splitLine(l, qty, descuentoUnitario, promo));
         promoDiscountTotal = round2(promoDiscountTotal + descuentoUnitario * qty);
+        unidadesUsadas += qty;
         l.unclaimed -= qty;
+        remaining -= qty;
       });
-      aplicadas.push({ promocion_id: promo.id, nombre: promo.nombre, descuento: promoDiscountTotal });
+      if (promoDiscountTotal > 0) aplicadas.push({ promocion_id: promo.id, nombre: promo.nombre, descuento: promoDiscountTotal, unidades: unidadesUsadas });
     } else if (promo.tipo === 'compra_x_lleva_y') {
       const scopeIds = Array.isArray(promo.producto_ids) ? promo.producto_ids : [];
       const buyQty = working.filter((l) => scopeIds.includes(l.menu_item_id)).reduce((sum, l) => sum + l.unclaimed, 0);
@@ -126,12 +137,12 @@ function applyPromotions({ items, promotions, now = new Date(), redemptionCounts
       const getQtyEligible = sets * promo.lleva_cantidad;
       const getLine = working.find((l) => l.menu_item_id === promo.lleva_producto_id);
       if (!getLine || getLine.unclaimed < 1) continue;
-      const qtyToDiscount = Math.min(getQtyEligible, getLine.unclaimed);
+      const qtyToDiscount = Math.min(getQtyEligible, getLine.unclaimed, budget);
       if (qtyToDiscount < 1) continue;
       const descuentoUnitario = round2(Number(getLine.precio) * (Number(promo.lleva_descuento_pct) / 100));
       outputLines.push(...splitLine(getLine, qtyToDiscount, descuentoUnitario, promo));
       getLine.unclaimed -= qtyToDiscount;
-      aplicadas.push({ promocion_id: promo.id, nombre: promo.nombre, descuento: round2(descuentoUnitario * qtyToDiscount) });
+      aplicadas.push({ promocion_id: promo.id, nombre: promo.nombre, descuento: round2(descuentoUnitario * qtyToDiscount), unidades: qtyToDiscount });
     }
   }
 
@@ -156,4 +167,4 @@ function applyPromotions({ items, promotions, now = new Date(), redemptionCounts
   return { lineas: outputLines, subtotal, descuento_total: descuentoTotal, total, promociones_aplicadas: aplicadas };
 }
 
-module.exports = { PROMOTION_TIPOS, round2, toDateString, isWithinWindow, hasWindowStarted, isPromotionEligible, matchesScope, applyPromotions };
+module.exports = { PROMOTION_TIPOS, round2, toDateString, isWithinWindow, hasWindowStarted, isPromotionEligible, remainingBudget, matchesScope, applyPromotions };

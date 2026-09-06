@@ -148,6 +148,36 @@ test('a quantity-limited promotion stops applying once its redemption limit is r
   assert.equal(atLimit.descuento_total, 0);
 });
 
+test('a quantity-limited promotion only discounts up to its remaining budget, not the whole order', () => {
+  const promo = basePromo({ id: 1, tipo: 'descuento_porcentaje', producto_ids: [1], porcentaje_descuento: 50, limite_unidades: 10 });
+  const items = [{ menu_item_id: 1, nombre: 'Latte', categoria: 'Café', precio: 50, cantidad: 5 }];
+  const result = applyPromotions({ items, promotions: [promo], now: NOW, redemptionCounts: { 1: 8 } });
+  // only 2 units of budget remain (10 - 8), even though the order has 5 units of Latte
+  const discountedLine = result.lineas.find((l) => l.promocion_id === 1);
+  const fullPriceLine = result.lineas.find((l) => l.promocion_id === null);
+  assert.equal(discountedLine.cantidad, 2);
+  assert.equal(fullPriceLine.cantidad, 3);
+  assert.equal(result.descuento_total, 50); // 2 units * $25 off
+});
+
+test('promociones_aplicadas reports the exact number of units each promotion discounted', () => {
+  const promo = basePromo({ id: 2, tipo: 'descuento_porcentaje', producto_ids: [3], porcentaje_descuento: 20 });
+  const items = [{ menu_item_id: 3, nombre: 'Cold Brew', categoria: 'Café', precio: 45, cantidad: 3 }];
+  const result = applyPromotions({ items, promotions: [promo], now: NOW });
+  assert.equal(result.promociones_aplicadas[0].unidades, 3);
+});
+
+test('compra_x_lleva_y also respects a remaining redemption budget', () => {
+  const promo = basePromo({
+    id: 4, tipo: 'compra_x_lleva_y', producto_ids: [5], compra_cantidad: 2,
+    lleva_producto_id: 5, lleva_cantidad: 1, lleva_descuento_pct: 100, limite_unidades: 3
+  });
+  const items = [{ menu_item_id: 5, nombre: 'Americano', categoria: 'Café', precio: 40, cantidad: 10 }];
+  const result = applyPromotions({ items, promotions: [promo], now: NOW, redemptionCounts: { 4: 2 } });
+  // 5 sets of 2 would normally grant 5 free units, but only 1 unit of budget remains (3 - 2)
+  assert.equal(result.descuento_total, 40);
+});
+
 test('a time-restricted promotion only applies within its hora_inicio/hora_fin window', () => {
   const promo = basePromo({ id: 1, tipo: 'descuento_porcentaje', producto_ids: [1], porcentaje_descuento: 50, hora_inicio: '19:00:00', hora_fin: '21:00:00' });
   const items = [{ menu_item_id: 1, nombre: 'Latte', categoria: 'Café', precio: 50, cantidad: 1 }];

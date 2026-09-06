@@ -4,7 +4,8 @@ async function nuevaOrden() {
   const items = (menuData.menu || []).filter((item) => item.activo);
   const categories = ['Todos', ...new Set(items.map((item) => item.categoria))];
 
-  const state = { mesa: null, cart: [], category: 'Todos', query: '', cartOpen: false };
+  const state = { mesa: null, cart: [], category: 'Todos', query: '', cartOpen: false, pricing: null };
+  let previewTimer = null;
 
   function filteredItems() {
     return items.filter((item) => (state.category === 'Todos' || item.categoria === state.category) && item.nombre.toLowerCase().includes(state.query));
@@ -17,14 +18,19 @@ async function nuevaOrden() {
 
   function cartMarkup() {
     const count = state.cart.reduce((sum, line) => sum + line.cantidad, 0);
-    const total = state.cart.reduce((sum, line) => sum + line.precio * line.cantidad, 0);
+    const naiveTotal = state.cart.reduce((sum, line) => sum + line.precio * line.cantidad, 0);
+    const pricing = state.pricing;
+    const total = pricing ? pricing.total : naiveTotal;
+    const promoRows = pricing && pricing.promociones_aplicadas.length
+      ? pricing.promociones_aplicadas.map((promo) => `<div class="cart-item-row promo-row"><span class="cart-item-name">Promo ${escapeHtml(promo.nombre)}</span><span class="cart-item-price">-${money.format(promo.descuento)}</span></div>`).join('')
+      : '';
     return `<div class="cart-bar-inner">
       <div class="cart-summary" data-cart-toggle>
         <span class="cart-summary-count">${count} artículo${count === 1 ? '' : 's'}</span>
         <span class="cart-summary-total">${money.format(total)}</span>
         <span class="cart-summary-toggle">${state.cartOpen ? 'Ocultar ▾' : 'Ver ▴'}</span>
       </div>
-      <div class="cart-items ${state.cartOpen ? 'open' : ''}">${state.cart.length ? state.cart.map((line) => `<div class="cart-item-row"><span class="cart-item-name">${escapeHtml(line.item_nombre)}</span><span class="cart-item-qty">x${line.cantidad}</span><span class="cart-item-price">${money.format(line.precio * line.cantidad)}</span><button type="button" class="button danger" data-remove-id="${line.id}" aria-label="Quitar ${escapeHtml(line.item_nombre)}">−</button></div>`).join('') : '<p class="subtle">Carrito vacío</p>'}</div>
+      <div class="cart-items ${state.cartOpen ? 'open' : ''}">${state.cart.length ? state.cart.map((line) => `<div class="cart-item-row"><span class="cart-item-name">${escapeHtml(line.item_nombre)}</span><span class="cart-item-qty">x${line.cantidad}</span><span class="cart-item-price">${money.format(line.precio * line.cantidad)}</span><button type="button" class="button danger" data-remove-id="${line.id}" aria-label="Quitar ${escapeHtml(line.item_nombre)}">−</button></div>`).join('') : '<p class="subtle">Carrito vacío</p>'}${promoRows}</div>
       <div class="cart-actions">
         <button type="button" class="button" data-change-mesa>Cambiar mesa</button>
         <button type="button" class="button" data-submit-order ${state.cart.length ? '' : 'disabled'}>Ordenar</button>
@@ -36,6 +42,22 @@ async function nuevaOrden() {
   function refreshItems() { const el = document.getElementById('cart-menu-items'); if (el) el.innerHTML = menuItemsMarkup(); }
   function refreshCategories() { document.querySelectorAll('[data-category]').forEach((button) => button.classList.toggle('active', button.dataset.category === state.category)); }
 
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    if (!state.cart.length) { state.pricing = null; refreshCart(); return; }
+    previewTimer = setTimeout(async () => {
+      try {
+        state.pricing = await api('/api/promotions/preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: state.cart.map((line) => ({ menu_item_id: line.id, cantidad: line.cantidad })) })
+        });
+      } catch (error) {
+        state.pricing = null;
+      }
+      refreshCart();
+    }, 300);
+  }
+
   function addToCart(id) {
     const item = items.find((entry) => entry.id === id);
     if (!item) return;
@@ -43,6 +65,7 @@ async function nuevaOrden() {
     if (existing) existing.cantidad += 1;
     else state.cart.push({ id, item_nombre: item.nombre, precio: Number(item.precio || 0), cantidad: 1 });
     refreshCart();
+    schedulePreview();
   }
 
   function removeFromCart(id) {
@@ -51,6 +74,7 @@ async function nuevaOrden() {
     if (existing.cantidad > 1) existing.cantidad -= 1;
     else state.cart = state.cart.filter((line) => line.id !== id);
     refreshCart();
+    schedulePreview();
   }
 
   async function submitOrder(button) {
@@ -59,13 +83,15 @@ async function nuevaOrden() {
     const originalLabel = button.textContent;
     button.textContent = 'Enviando…';
     try {
-      const payload = { mesa_id: state.mesa.id, mesa_nombre: state.mesa.nombre, items: state.cart.map((line) => ({ item_nombre: line.item_nombre, precio: line.precio, cantidad: line.cantidad })) };
+      const payload = { mesa_id: state.mesa.id, mesa_nombre: state.mesa.nombre, items: state.cart.map((line) => ({ menu_item_id: line.id, cantidad: line.cantidad })) };
       const result = await api('/api/ordenes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      Orama.toast(`Orden enviada — ${money.format(Number(result.orden?.total || 0))}`, 'success');
+      const promoNote = (result.promociones_aplicadas || []).length ? ` — promo aplicada` : '';
+      Orama.toast(`Orden enviada — ${money.format(Number(result.orden?.total || 0))}${promoNote}`, 'success');
       const mesaRecord = mesas.find((m) => m.id === state.mesa.id);
       if (mesaRecord) mesaRecord.status = 'ocupada';
       state.cart = [];
       state.cartOpen = false;
+      state.pricing = null;
       refreshCart();
     } catch (error) {
       Orama.toast(error.message, 'error');
@@ -111,7 +137,7 @@ async function nuevaOrden() {
     if (cartToggle) { state.cartOpen = !state.cartOpen; refreshCart(); return; }
 
     const changeMesa = event.target.closest('[data-change-mesa]');
-    if (changeMesa) { state.mesa = null; state.cart = []; state.cartOpen = false; renderMesaStep(); return; }
+    if (changeMesa) { state.mesa = null; state.cart = []; state.cartOpen = false; state.pricing = null; renderMesaStep(); return; }
 
     const submitButton = event.target.closest('[data-submit-order]');
     if (submitButton && !submitButton.disabled) submitOrder(submitButton);
@@ -119,7 +145,7 @@ async function nuevaOrden() {
 
   renderMesaStep();
   app.addEventListener('click', onAppClick);
-  return () => app.removeEventListener('click', onAppClick);
+  return () => { clearTimeout(previewTimer); app.removeEventListener('click', onAppClick); };
 }
 
 Orama.routes['nueva-orden'] = nuevaOrden;

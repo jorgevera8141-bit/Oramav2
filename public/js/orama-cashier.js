@@ -128,18 +128,34 @@ async function cashier() {
 
   async function showReceipt(order, method, amountCash, amountCard) {
     let items = [];
-    try { items = (await api(`/api/ordenes/${order.id}/items`)).items || []; } catch (error) { /* receipt still works without items */ }
+    let redenciones = [];
+    try {
+      const data = await api(`/api/ordenes/${order.id}/items`);
+      items = data.items || [];
+      redenciones = data.redenciones || [];
+    } catch (error) { /* receipt still works without items */ }
     const methodLabel = PAYMENT_LABELS[method] || method;
     const now = new Date();
     const fecha = now.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const hora = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-    const itemsHtml = items.map((item) => `<tr><td style="padding:3px 0;font-size:13px">x${item.cantidad} ${escapeHtml(item.item_nombre)}</td><td style="padding:3px 0;font-size:13px;text-align:right">${money.format(Number(item.precio) * Number(item.cantidad))}</td></tr>`).join('');
+    const grouped = new Map();
+    items.forEach((item) => {
+      const regularUnit = Number(item.precio) + Number(item.descuento_unitario || 0);
+      const existing = grouped.get(item.item_nombre) || { cantidad: 0, subtotal: 0 };
+      existing.cantidad += Number(item.cantidad);
+      existing.subtotal += regularUnit * Number(item.cantidad);
+      grouped.set(item.item_nombre, existing);
+    });
+    const itemsHtml = Array.from(grouped.entries()).map(([nombre, g]) => `<tr><td style="padding:3px 0;font-size:13px">x${g.cantidad} ${escapeHtml(nombre)}</td><td style="padding:3px 0;font-size:13px;text-align:right">${money.format(g.subtotal)}</td></tr>`).join('');
+    const promoHtml = redenciones.length
+      ? redenciones.map((r) => `<tr><td style="padding:3px 0;font-size:13px;font-style:italic;color:#0d6b54">Promo ${escapeHtml(r.nombre)}</td><td style="padding:3px 0;font-size:13px;text-align:right;color:#0d6b54">-${money.format(Number(r.descuento_aplicado))}</td></tr>`).join('')
+      : '';
     const splitLine = method === 'mixto' ? `<div class="method">Efectivo: ${money.format(amountCash)} · Tarjeta: ${money.format(amountCard)}</div>` : '';
     const receiptHtml = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Recibo — Orama Café</title>
       <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Courier New',monospace;background:#fff;display:flex;justify-content:center;padding:20px}.receipt{width:300px;padding:20px 16px}.logo{text-align:center;font-size:22px;font-weight:700;letter-spacing:3px;font-family:Georgia,serif;color:#0d6b54;margin-bottom:12px}.divider{border-top:1px dashed #ccc;margin:10px 0}.meta{display:flex;justify-content:space-between;font-size:11px;color:#666;margin-bottom:8px}table{width:100%;border-collapse:collapse}.total-row td{font-size:15px;font-weight:700;color:#0d6b54;padding-top:8px}.method{font-size:12px;color:#666;margin-top:6px}.thanks{text-align:center;margin-top:16px;font-size:13px;color:#0d6b54;font-style:italic}.btn-row{display:flex;gap:10px;margin-top:20px;justify-content:center}.btn{padding:10px 24px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer}.btn-print{background:#0d6b54;color:#fff}.btn-close{background:#eee;color:#333}@media print{.btn-row{display:none}body{padding:0}}</style>
       </head><body><div class="receipt"><div class="logo">ORAMA CAFÉ</div><div class="divider"></div>
       <div class="meta"><span>${fecha} ${hora}</span><span>Orden #${order.id}</span></div><div class="divider"></div>
-      <table>${itemsHtml}</table><div class="divider"></div>
+      <table>${itemsHtml}</table>${promoHtml ? `<div class="divider"></div><table>${promoHtml}</table>` : ''}<div class="divider"></div>
       <table><tr class="total-row"><td>TOTAL</td><td style="text-align:right">${money.format(order.total)}</td></tr></table>
       ${splitLine}<div class="method">Método: ${methodLabel}</div><div class="divider"></div>
       <div class="thanks">¡Gracias por tu visita!<br>Vuelve pronto</div>
