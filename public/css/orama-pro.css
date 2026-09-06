@@ -23,3 +23,21 @@
 .period-bar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
 .period-bar .field-group{margin-bottom:0}
 @media(max-width:640px){.chart-card .chart-wrap{height:220px}}
+
+.badge-estado{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.02em;border:1px solid transparent}
+.badge-estado.neutral{background:rgba(168,159,145,.15);color:var(--muted);border-color:rgba(168,159,145,.3)}
+.badge-estado.live{background:var(--teal-soft);color:var(--teal);border-color:rgba(42,157,143,.4)}
+.badge-estado.warn{background:rgba(212,168,75,.15);color:var(--amber);border-color:rgba(212,168,75,.4)}
+.badge-estado.danger{background:rgba(201,112,100,.15);color:var(--terracotta);border-color:rgba(201,112,100,.4)}
+.badge-estado.muted{background:rgba(61,43,31,.4);color:var(--muted);border-color:var(--line)}
+.promo-hero{display:flex;gap:20px;padding:0;overflow:hidden}
+.promo-hero-image{flex:0 0 220px;background-size:cover;background-position:center;min-height:180px}
+.promo-hero-body{padding:24px;display:flex;flex-direction:column;gap:6px;justify-content:center}
+.promo-hero-price{font-family:'Playfair Display',serif;font-size:32px;color:var(--teal)}
+@media(max-width:640px){.promo-hero{flex-direction:column}.promo-hero-image{flex-basis:160px}}
+.promo-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.promo-card-head h3{margin:0;font-size:18px}
+.promo-type-fields{display:contents}
+.promo-type-fields[hidden]{display:none}
+.checkbox-field label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--cream)}
+.checkbox-field input[type="checkbox"]{width:18px;height:18px}

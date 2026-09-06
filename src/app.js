@@ -11,6 +11,7 @@ const reportsRoutes = require('./modules/reports/routes');
 const staffRoutes = require('./modules/staff/routes');
 const settingsRoutes = require('./modules/settings/routes');
 const gastosRoutes = require('./modules/gastos/routes');
+const promotionsRoutes = require('./modules/promotions/routes');
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api', reportsRoutes);
 app.use('/api', staffRoutes);
 app.use('/api', settingsRoutes);
 app.use('/api', gastosRoutes);
+app.use('/api', promotionsRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
@@ -150,6 +152,72 @@ async function initDb() {
     persona_nombre TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS promociones (
+    id SERIAL PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    descripcion TEXT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('precio_fijo','descuento_porcentaje','compra_x_lleva_y')),
+    producto_ids INTEGER[],
+    categoria TEXT,
+    precio_promocional NUMERIC,
+    porcentaje_descuento NUMERIC,
+    compra_cantidad INTEGER,
+    lleva_producto_id INTEGER REFERENCES menu_items(id),
+    lleva_cantidad INTEGER,
+    lleva_descuento_pct NUMERIC DEFAULT 100,
+    fecha_inicio DATE NOT NULL,
+    hora_inicio TIME,
+    fecha_fin DATE NOT NULL,
+    hora_fin TIME,
+    limite_unidades INTEGER,
+    condiciones TEXT,
+    apilable BOOLEAN NOT NULL DEFAULT false,
+    imagen_url TEXT,
+    estado TEXT NOT NULL DEFAULT 'DRAFT' CHECK (estado IN
+      ('DRAFT','PENDING_APPROVAL','CHANGES_REQUESTED','APPROVED','SCHEDULED','ACTIVE','EXPIRED','REJECTED','CANCELLED')),
+    creado_por TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS promocion_redenciones (
+    id SERIAL PRIMARY KEY,
+    promocion_id INTEGER REFERENCES promociones(id),
+    orden_id INTEGER REFERENCES ordenes(id),
+    descuento_aplicado NUMERIC NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS publicaciones_sociales (
+    id SERIAL PRIMARY KEY,
+    promocion_id INTEGER REFERENCES promociones(id),
+    titular TEXT,
+    caption TEXT,
+    cta TEXT,
+    hashtags TEXT,
+    imagen_url TEXT,
+    imagenes_adicionales TEXT[],
+    plataformas TEXT[],
+    programado_para TIMESTAMP,
+    estado TEXT NOT NULL DEFAULT 'DRAFT' CHECK (estado IN
+      ('DRAFT','PENDING_APPROVAL','CHANGES_REQUESTED','APPROVED','SCHEDULED','READY_FOR_PUBLICATION','REJECTED')),
+    creado_por TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS bitacora (
+    id SERIAL PRIMARY KEY,
+    entidad_tipo TEXT NOT NULL,
+    entidad_id INTEGER NOT NULL,
+    accion TEXT NOT NULL,
+    actor_nombre TEXT NOT NULL,
+    actor_tipo TEXT NOT NULL,
+    estado_anterior TEXT,
+    estado_nuevo TEXT,
+    detalle JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await pool.query('ALTER TABLE orden_items ADD COLUMN IF NOT EXISTS promocion_id INTEGER REFERENCES promociones(id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_bitacora_entidad ON bitacora(entidad_tipo, entidad_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_promocion_redenciones_promo ON promocion_redenciones(promocion_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_orden_pagos_orden ON orden_pagos(orden_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_inv_mov_item ON inventory_movements(inventory_item_id, created_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_inv_mov_reason ON inventory_movements(reason)');
