@@ -10,6 +10,7 @@ const invoicesRoutes = require('./modules/invoices/routes');
 const reportsRoutes = require('./modules/reports/routes');
 const staffRoutes = require('./modules/staff/routes');
 const settingsRoutes = require('./modules/settings/routes');
+const gastosRoutes = require('./modules/gastos/routes');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use('/api', invoicesRoutes);
 app.use('/api', reportsRoutes);
 app.use('/api', staffRoutes);
 app.use('/api', settingsRoutes);
+app.use('/api', gastosRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);

@@ -193,9 +193,48 @@ router.get('/reportes/mesas', async (req, res) => {
   res.json({ success: true, mesas: rows });
 });
 
-router.get('/finanzas', async (_req, res) => {
-  const { rows } = await pool.query('SELECT COALESCE(SUM(total),0) AS ingresos FROM ordenes WHERE status = \'cerrada\'');
-  res.json({ success: true, finances: rows[0] });
+router.get('/finanzas', async (req, res) => {
+  const from = parseDateParam(req.query.from);
+  const to = parseDateParam(req.query.to);
+  if (!from || !to) throw Object.assign(new Error('from y to son requeridos (YYYY-MM-DD)'), { statusCode: 400 });
+
+  const { rows: ingresosPorMes } = await pool.query(
+    `SELECT to_char(date_trunc('month', closed_at), 'YYYY-MM') AS mes, COALESCE(SUM(total),0) AS ingresos
+     FROM ordenes WHERE status = 'cerrada' AND closed_at::date BETWEEN $1 AND $2
+     GROUP BY 1 ORDER BY 1`,
+    [from, to]
+  );
+  const { rows: gastosPorMes } = await pool.query(
+    `SELECT to_char(date_trunc('month', fecha), 'YYYY-MM') AS mes, COALESCE(SUM(monto),0) AS gastos
+     FROM gastos WHERE fecha BETWEEN $1 AND $2
+     GROUP BY 1 ORDER BY 1`,
+    [from, to]
+  );
+  const { rows: categoriasGasto } = await pool.query(
+    `SELECT categoria, COALESCE(SUM(monto),0) AS total
+     FROM gastos WHERE fecha BETWEEN $1 AND $2
+     GROUP BY categoria ORDER BY total DESC`,
+    [from, to]
+  );
+
+  const mesesMap = new Map();
+  ingresosPorMes.forEach((row) => mesesMap.set(row.mes, { mes: row.mes, ingresos: Number(row.ingresos), gastos: 0 }));
+  gastosPorMes.forEach((row) => {
+    const existing = mesesMap.get(row.mes) || { mes: row.mes, ingresos: 0, gastos: 0 };
+    existing.gastos = Number(row.gastos);
+    mesesMap.set(row.mes, existing);
+  });
+  const meses = Array.from(mesesMap.values())
+    .sort((a, b) => a.mes.localeCompare(b.mes))
+    .map((m) => ({ ...m, neto: m.ingresos - m.gastos }));
+
+  const resumen = meses.reduce(
+    (acc, m) => ({ ingresos: acc.ingresos + m.ingresos, gastos: acc.gastos + m.gastos }),
+    { ingresos: 0, gastos: 0 }
+  );
+  resumen.neto = resumen.ingresos - resumen.gastos;
+
+  res.json({ success: true, meses, categorias_gasto: categoriasGasto, resumen });
 });
 
 module.exports = router;
