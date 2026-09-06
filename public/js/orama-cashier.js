@@ -6,6 +6,30 @@ const PAYMENT_METHODS = [
   { id: 'cliente_frecuente', label: 'Frecuente' }
 ];
 const PAYMENT_LABELS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', mixto: 'Mixto', cortesia: 'Cortesía', cliente_frecuente: 'Cliente Frecuente' };
+const REGIMENES_FISCALES = [
+  ['601', 'General de Ley Personas Morales'],
+  ['603', 'Personas Morales con Fines no Lucrativos'],
+  ['605', 'Sueldos y Salarios'],
+  ['606', 'Arrendamiento'],
+  ['608', 'Demás ingresos'],
+  ['612', 'Personas Físicas con Actividades Empresariales'],
+  ['616', 'Sin obligaciones fiscales'],
+  ['621', 'Incorporación Fiscal'],
+  ['626', 'RESICO']
+];
+const USOS_CFDI = [
+  ['G01', 'Adquisición de mercancías'],
+  ['G03', 'Gastos en general'],
+  ['P01', 'Por definir'],
+  ['S01', 'Sin efectos fiscales']
+];
+let facturacionEnabledCache = null;
+async function isFacturacionEnabled() {
+  if (facturacionEnabledCache === null) {
+    try { facturacionEnabledCache = !!(await api('/api/factura/status')).enabled; } catch (error) { facturacionEnabledCache = false; }
+  }
+  return facturacionEnabledCache;
+}
 
 async function cashier() {
   let activasCache = [];
@@ -130,6 +154,102 @@ async function cashier() {
     }
   }
 
+  function openFacturaFlow(order, method) {
+    closeAnyModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'orama-overlay';
+    overlay.innerHTML = '<div class="orama-modal" id="factura-body" role="none" aria-modal="true"></div>';
+    document.body.appendChild(overlay);
+    currentOverlay = overlay;
+    const body = overlay.querySelector('#factura-body');
+    let lastFactura = null;
+    let formaPagoTarjeta = '28';
+
+    function setBody(html) { body.innerHTML = html; }
+
+    function renderPrompt() {
+      setBody(`<p class="orama-modal-message">🧾 ¿Facturar esta venta?</p>
+        <p class="subtle" style="margin-bottom:18px">Total: ${money.format(order.total)}</p>
+        <div class="orama-modal-actions"><button type="button" class="button" data-factura-skip>Omitir</button><button type="button" class="button" data-factura-start>Facturar</button></div>`);
+    }
+
+    function renderForm() {
+      const regimenOpts = REGIMENES_FISCALES.map(([value, label]) => `<option value="${value}">${value} - ${escapeHtml(label)}</option>`).join('');
+      const usoOpts = USOS_CFDI.map(([value, label]) => `<option value="${value}">${value} - ${escapeHtml(label)}</option>`).join('');
+      const tarjetaField = method === 'tarjeta' ? `<div class="field-group"><label>¿Débito o crédito?</label><div class="filters"><button type="button" class="pill ${formaPagoTarjeta === '28' ? 'active' : ''}" data-forma-pago="28">Débito</button><button type="button" class="pill ${formaPagoTarjeta === '04' ? 'active' : ''}" data-forma-pago="04">Crédito</button></div></div>` : '';
+      setBody(`<p class="orama-modal-message">Datos de facturación</p>
+        <p class="subtle" style="margin-bottom:14px">Total: ${money.format(order.total)}</p>
+        <button type="button" class="button" style="width:100%;margin-bottom:14px" data-factura-global>⚡ Factura Global (sin datos)</button>
+        <div class="field-group"><label for="factura-rfc">RFC</label><input class="search" id="factura-rfc" maxlength="13" style="text-transform:uppercase" placeholder="XAXX010101000"></div>
+        <div class="field-group"><label for="factura-razon">Razón Social / Nombre</label><input class="search" id="factura-razon" placeholder="Nombre completo o razón social"></div>
+        <div class="field-group"><label for="factura-regimen">Régimen Fiscal</label><select class="search" id="factura-regimen"><option value="">Selecciona…</option>${regimenOpts}</select></div>
+        <div class="field-group"><label for="factura-cp">Código Postal</label><input class="search" id="factura-cp" maxlength="5" inputmode="numeric" placeholder="20000"></div>
+        <div class="field-group"><label for="factura-uso">Uso del CFDI</label><select class="search" id="factura-uso"><option value="">Selecciona…</option>${usoOpts}</select></div>
+        ${tarjetaField}
+        <div class="field-group"><label for="factura-email">Correo (opcional)</label><input class="search" id="factura-email" type="email" placeholder="cliente@correo.com"></div>
+        <p class="subtle" id="factura-error" style="color:var(--terracotta);min-height:18px"></p>
+        <div class="orama-modal-actions"><button type="button" class="button" data-factura-cancel>Cancelar</button><button type="button" class="button" data-factura-submit>Timbrar factura</button></div>`);
+    }
+
+    function renderSuccess(factura) {
+      setBody(`<p class="orama-modal-message">✅ Factura timbrada</p>
+        <div class="pay-highlight"><p class="pay-highlight-label">FOLIO FISCAL (UUID)</p><p class="pay-highlight-value" style="font-size:13px;word-break:break-all">${escapeHtml(factura.folio_fiscal || '—')}</p></div>
+        <div class="action-row" style="margin-bottom:12px"><button type="button" class="button" data-factura-email>📧 Correo</button><button type="button" class="button" data-factura-whatsapp>📱 WhatsApp</button></div>
+        <a href="/api/factura/${factura.id}/pdf" target="_blank" class="subtle" style="display:block;text-align:center;margin-bottom:12px">Ver PDF</a>
+        <div class="orama-modal-actions"><button type="button" class="button" data-factura-cancel>Cerrar</button></div>`);
+    }
+
+    async function submitFactura(payload) {
+      const submitButtons = body.querySelectorAll('[data-factura-submit],[data-factura-global]');
+      submitButtons.forEach((button) => { button.disabled = true; });
+      try {
+        const result = await api('/api/factura', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orden_id: order.id, ...payload }) });
+        lastFactura = result.factura;
+        renderSuccess(result.factura);
+      } catch (error) {
+        submitButtons.forEach((button) => { button.disabled = false; });
+        const errorEl = document.getElementById('factura-error');
+        if (errorEl) errorEl.textContent = error.message;
+      }
+    }
+
+    overlay.addEventListener('click', async (event) => {
+      if (event.target === overlay || event.target.closest('[data-factura-cancel]') || event.target.closest('[data-factura-skip]')) { closeAnyModal(); return; }
+      if (event.target.closest('[data-factura-start]')) { renderForm(); return; }
+      const formaPagoBtn = event.target.closest('[data-forma-pago]');
+      if (formaPagoBtn) { formaPagoTarjeta = formaPagoBtn.dataset.formaPago; renderForm(); return; }
+      if (event.target.closest('[data-factura-global]')) { submitFactura({ tipo: 'global' }); return; }
+      if (event.target.closest('[data-factura-submit]')) {
+        const rfc = document.getElementById('factura-rfc').value.trim().toUpperCase();
+        const razon_social = document.getElementById('factura-razon').value.trim();
+        const regimen_fiscal = document.getElementById('factura-regimen').value;
+        const cp = document.getElementById('factura-cp').value.trim();
+        const uso_cfdi = document.getElementById('factura-uso').value;
+        const email = document.getElementById('factura-email').value.trim();
+        const errorEl = document.getElementById('factura-error');
+        if (!rfc || !razon_social || !regimen_fiscal || !cp || !uso_cfdi) { errorEl.textContent = 'Completa todos los campos requeridos'; return; }
+        if (!/^\d{5}$/.test(cp)) { errorEl.textContent = 'El código postal debe tener 5 dígitos'; return; }
+        submitFactura({ tipo: 'normal', rfc, razon_social, regimen_fiscal, cp, uso_cfdi, email: email || undefined, forma_pago_tarjeta: method === 'tarjeta' ? formaPagoTarjeta : undefined });
+        return;
+      }
+      if (event.target.closest('[data-factura-email]')) {
+        const email = await Orama.prompt('Correo para reenviar la factura:', { placeholder: 'cliente@correo.com' });
+        if (!email) return;
+        try {
+          await api(`/api/factura/${lastFactura.id}/email`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+          Orama.toast('Correo enviado', 'success');
+        } catch (error) { Orama.toast(error.message, 'error'); }
+        return;
+      }
+      if (event.target.closest('[data-factura-whatsapp]')) {
+        const pdfUrl = `${window.location.origin}/api/factura/${lastFactura.id}/pdf`;
+        window.open(`https://wa.me/?text=${encodeURIComponent('Aquí tienes tu factura de Orama Café: ' + pdfUrl)}`, '_blank');
+      }
+    });
+
+    renderPrompt();
+  }
+
   async function confirmPayment(order, method) {
     let amount_cash = 0;
     let amount_card = 0;
@@ -164,6 +284,8 @@ async function cashier() {
       Orama.toast(`Cobro registrado — ${money.format(order.total)}`, 'success');
       await showReceipt(order, method, amount_cash, amount_card);
       await loadActivas();
+      const canFacturar = Number(order.total) > 0 && method !== 'cortesia' && method !== 'cliente_frecuente' && await isFacturacionEnabled();
+      if (canFacturar) openFacturaFlow(order, method);
     } catch (error) {
       Orama.toast(error.message, 'error');
       confirmButton.disabled = false;
