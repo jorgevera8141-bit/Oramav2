@@ -3,23 +3,11 @@ const pool = require('../../config/database');
 const { validate } = require('../../middleware/validate');
 const { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema, previewSchema } = require('./schemas');
 const { verifyStaffPin } = require('../../shared/pin-auth');
+const { logBitacora, getStaffTipo } = require('../../shared/audit');
 const { hasWindowStarted, toDateString } = require('./engine');
 const { sweepPromotionLifecycle, getActivePromotions, priceItems } = require('./service');
 
 const router = express.Router();
-
-async function getStaffTipo(nombre) {
-  const { rows } = await pool.query('SELECT tipo FROM staff WHERE nombre = $1', [nombre]);
-  return rows[0]?.tipo || 'staff';
-}
-
-async function logBitacora({ entidadTipo, entidadId, accion, actorNombre, actorTipo, estadoAnterior, estadoNuevo, detalle }) {
-  await pool.query(
-    `INSERT INTO bitacora (entidad_tipo, entidad_id, accion, actor_nombre, actor_tipo, estado_anterior, estado_nuevo, detalle)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [entidadTipo, entidadId, accion, actorNombre, actorTipo, estadoAnterior || null, estadoNuevo || null, detalle ? JSON.stringify(detalle) : null]
-  );
-}
 
 router.get('/promotions', async (req, res) => {
   await sweepPromotionLifecycle();

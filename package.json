@@ -4,7 +4,19 @@
 	"private": true,
 	"description": "Café Rosinal point-of-sale system",
 	"main": "src/app.js",
-	"scripts": { "start": "node src/app.js", "seed": "node src/seeds/seed-menu.pg.js", "test": "node --test" },
-	"engines": { "node": ">=26.0.0" },
-	"dependencies": { "express": "^5.1.0", "pg": "^8.16.3", "zod": "^4.1.5" }
+	"scripts": {
+		"start": "node src/app.js",
+		"seed": "node src/seeds/seed-menu.pg.js",
+		"test": "node --test"
+	},
+	"engines": {
+		"node": ">=26.0.0"
+	},
+	"dependencies": {
+		"express": "^5.1.0",
+		"multer": "^2.3.0",
+		"pg": "^8.16.3",
+		"sharp": "^0.35.4",
+		"zod": "^4.1.5"
+	}
 }

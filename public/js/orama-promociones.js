@@ -131,6 +131,26 @@ function wireTipoSwitcher(prefix = 'promo') {
   });
 }
 
+const SOCIAL_ESTADO_LABELS = {
+  DRAFT: 'Borrador',
+  PENDING_APPROVAL: 'Pendiente de aprobación',
+  CHANGES_REQUESTED: 'Cambios solicitados',
+  APPROVED: 'Aprobada',
+  SCHEDULED: 'Programada',
+  READY_FOR_PUBLICATION: 'Lista para publicar',
+  REJECTED: 'Rechazada'
+};
+const SOCIAL_ESTADO_CLASS = {
+  DRAFT: 'neutral', PENDING_APPROVAL: 'warn', CHANGES_REQUESTED: 'warn', APPROVED: 'neutral',
+  SCHEDULED: 'neutral', READY_FOR_PUBLICATION: 'live', REJECTED: 'danger'
+};
+
+function socialEstadoBadge(estado) {
+  const label = SOCIAL_ESTADO_LABELS[estado] || estado;
+  const cls = SOCIAL_ESTADO_CLASS[estado] || 'neutral';
+  return `<span class="badge-estado ${cls}">${escapeHtml(label)}</span>`;
+}
+
 function promoCard(promo) {
   return `<article class="glass-card promo-card">
     <div class="promo-card-head">
@@ -148,12 +168,36 @@ function promoCard(promo) {
       ${promo.estado === 'PENDING_APPROVAL' ? `<button type="button" class="button" data-review-promo="${promo.id}">Revisar</button>` : ''}
       ${['APPROVED', 'SCHEDULED'].includes(promo.estado) ? `<button type="button" class="button" data-activate-promo="${promo.id}">Activar ahora</button>` : ''}
       ${promo.estado === 'ACTIVE' ? `<button type="button" class="button danger" data-deactivate-promo="${promo.id}">Desactivar</button>` : ''}
+      ${['APPROVED', 'SCHEDULED', 'ACTIVE'].includes(promo.estado) ? `<button type="button" class="button" data-compose-social="${promo.id}">Crear publicación</button>` : ''}
+    </div>
+  </article>`;
+}
+
+function socialPostCard(post) {
+  const fecha = post.programado_para ? String(post.programado_para).slice(0, 16).replace('T', ' ') : null;
+  return `<article class="glass-card promo-card">
+    <div class="promo-card-head">
+      <h3>${escapeHtml(post.titular || '(sin titular)')}</h3>
+      ${socialEstadoBadge(post.estado)}
+    </div>
+    <p class="subtle">${escapeHtml(post.promocion_nombre || 'Promoción')} · ${(post.plataformas || []).map(escapeHtml).join(', ')}</p>
+    ${post.caption ? `<p>${escapeHtml(post.caption)}</p>` : ''}
+    ${post.imagen_url ? `<div class="promo-hero-image" style="background-image:url('${escapeHtml(post.imagen_url)}');min-height:120px;border-radius:8px"></div>` : ''}
+    ${fecha ? `<p class="mono subtle">Programada: ${escapeHtml(fecha)}</p>` : ''}
+    <p class="subtle">Creada por ${escapeHtml(post.creado_por)} · ${escapeHtml((post.created_at || '').slice(0, 10))}</p>
+    <div class="action-row">
+      ${['DRAFT', 'CHANGES_REQUESTED'].includes(post.estado) ? `<button type="button" class="button" data-edit-social="${post.id}">Editar</button>` : ''}
+      ${['DRAFT', 'CHANGES_REQUESTED'].includes(post.estado) ? `<button type="button" class="button" data-submit-social="${post.id}">Enviar a revisión</button>` : ''}
+      ${post.estado === 'DRAFT' ? `<button type="button" class="button danger" data-delete-social="${post.id}">Eliminar</button>` : ''}
+      ${post.estado === 'PENDING_APPROVAL' ? `<button type="button" class="button" data-review-social="${post.id}">Revisar</button>` : ''}
+      ${['APPROVED', 'SCHEDULED'].includes(post.estado) ? `<button type="button" class="button" data-publish-social="${post.id}">Preparar publicación</button>` : ''}
     </div>
   </article>`;
 }
 
 async function promociones() {
   let promos = [];
+  let socialPosts = [];
   let menuItems = [];
   let staffList = [];
   let currentOverlay = null;
@@ -161,13 +205,15 @@ async function promociones() {
 
   function closeAnyModal() {
     if (currentOverlay) { currentOverlay.remove(); currentOverlay = null; }
+    if (Orama.closeSocialComposer) Orama.closeSocialComposer();
   }
 
   async function loadAll() {
-    const [promoData, menuData, staffData] = await Promise.all([
-      api('/api/promotions'), api('/api/menu'), api('/api/staff/active')
+    const [promoData, socialData, menuData, staffData] = await Promise.all([
+      api('/api/promotions'), api('/api/social-posts'), api('/api/menu'), api('/api/staff/active')
     ]);
     promos = promoData.promociones || [];
+    socialPosts = socialData.publicaciones || [];
     menuItems = (menuData.menu || []).filter((m) => m.activo);
     staffList = staffData.staff || [];
   }
@@ -197,6 +243,10 @@ async function promociones() {
     } else if (activeTab === 'programadas') {
       const scheduled = promos.filter((p) => ['APPROVED', 'SCHEDULED'].includes(p.estado));
       container.innerHTML = scheduled.length ? `<section class="grid">${scheduled.map(promoCard).join('')}</section>` : '<div class="empty">Sin promociones aprobadas o programadas</div>';
+    } else if (activeTab === 'publicaciones') {
+      container.innerHTML = socialPosts.length
+        ? `<section class="grid">${socialPosts.map(socialPostCard).join('')}</section>`
+        : '<div class="empty">Sin publicaciones. Crea una desde una promoción aprobada o activa.</div>';
     } else {
       const historial = promos.filter((p) => ['EXPIRED', 'REJECTED', 'CANCELLED'].includes(p.estado));
       container.innerHTML = historial.length ? `<section class="grid">${historial.map(promoCard).join('')}</section>` : '<div class="empty">Sin historial todavía</div>';
@@ -348,6 +398,67 @@ async function promociones() {
     });
   }
 
+  function openSocialReviewModal(post) {
+    closeAnyModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'orama-overlay';
+    overlay.innerHTML = `<div class="orama-modal split-view" role="none" aria-modal="true">
+      <p class="orama-modal-message">Revisar publicación</p>
+      <div class="promo-review-detail">
+        <h3>${escapeHtml(post.titular || '(sin titular)')}</h3>
+        <p class="subtle">${escapeHtml(post.promocion_nombre || 'Promoción')} · ${(post.plataformas || []).map(escapeHtml).join(', ')}</p>
+        ${post.caption ? `<p>${escapeHtml(post.caption)}</p>` : ''}
+        ${post.cta ? `<p><strong>CTA:</strong> ${escapeHtml(post.cta)}</p>` : ''}
+        ${post.hashtags ? `<p class="subtle">${escapeHtml(post.hashtags)}</p>` : ''}
+        ${post.programado_para ? `<p class="mono subtle">Programada: ${escapeHtml(String(post.programado_para).slice(0, 16).replace('T', ' '))}</p>` : ''}
+        ${post.imagen_url ? `<img src="${escapeHtml(post.imagen_url)}" alt="" style="max-width:100%;border-radius:8px;margin-top:8px">` : ''}
+        <p class="mono subtle">Creada por ${escapeHtml(post.creado_por)} · ${escapeHtml((post.created_at || '').slice(0, 10))}</p>
+      </div>
+      <div class="filters">
+        <div class="field-group"><label for="social-review-accion">Acción</label>
+          <select class="search" id="social-review-accion">
+            <option value="approve">Aprobar</option>
+            <option value="changes_requested">Solicitar cambios</option>
+            <option value="reject">Rechazar</option>
+          </select>
+        </div>
+        <div class="field-group"><label for="social-review-actor">Tu nombre (gerencia)</label>
+          <select class="search" id="social-review-actor">${staffList.filter((s) => s.tipo === 'management').map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
+        </div>
+        <div class="field-group"><label for="social-review-pin">Tu PIN</label><input class="search" id="social-review-pin" type="password" inputmode="numeric" maxlength="10"></div>
+        <div class="field-group"><label for="social-review-nota">Nota (requerida para solicitar cambios)</label><input class="search" id="social-review-nota" type="text" maxlength="500"></div>
+      </div>
+      <div class="orama-modal-actions">
+        <button type="button" class="button" data-ui="cancel">Cerrar</button>
+        <button type="button" class="button" data-ui="confirm">Confirmar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    currentOverlay = overlay;
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) closeAnyModal(); });
+    overlay.querySelector('[data-ui="cancel"]').addEventListener('click', closeAnyModal);
+    overlay.querySelector('[data-ui="confirm"]').addEventListener('click', async () => {
+      const accion = document.getElementById('social-review-accion').value;
+      const actor_nombre = document.getElementById('social-review-actor').value;
+      const actor_pin = document.getElementById('social-review-pin').value;
+      const nota = document.getElementById('social-review-nota').value || undefined;
+      if (!actor_pin) { Orama.toast('Ingresa tu PIN', 'error'); return; }
+      if (accion === 'changes_requested' && !nota) { Orama.toast('La nota es requerida para solicitar cambios', 'error'); return; }
+      try {
+        await api(`/api/social-posts/${post.id}/review`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion, actor_nombre, actor_pin, nota })
+        });
+        Orama.toast('Revisión registrada', 'success');
+        closeAnyModal();
+        await loadAll();
+        renderTabContent();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
+    });
+  }
+
   async function onAppClick(event) {
     const tabButton = event.target.closest('[data-tab]');
     if (tabButton) { switchTab(tabButton.dataset.tab); return; }
@@ -428,6 +539,84 @@ async function promociones() {
       } catch (error) {
         Orama.toast(error.message, 'error');
       }
+      return;
+    }
+
+    const composeButton = event.target.closest('[data-compose-social]');
+    if (composeButton) {
+      const promo = promos.find((p) => String(p.id) === composeButton.dataset.composeSocial);
+      if (promo) {
+        Orama.openSocialComposer({
+          promo, staffList,
+          onSaved: async () => { await loadAll(); switchTab('publicaciones'); }
+        });
+      }
+      return;
+    }
+    const editSocialButton = event.target.closest('[data-edit-social]');
+    if (editSocialButton) {
+      const post = socialPosts.find((p) => String(p.id) === editSocialButton.dataset.editSocial);
+      const promo = post && promos.find((p) => p.id === post.promocion_id);
+      if (post) {
+        Orama.openSocialComposer({
+          promo: promo || { id: post.promocion_id, nombre: post.promocion_nombre }, staffList, existingPost: post,
+          onSaved: async () => { await loadAll(); renderTabContent(); }
+        });
+      }
+      return;
+    }
+    const submitSocialButton = event.target.closest('[data-submit-social]');
+    if (submitSocialButton) {
+      const result = await openPinModal({ title: '¿Enviar esta publicación a revisión?' });
+      if (!result) return;
+      try {
+        await api(`/api/social-posts/${submitSocialButton.dataset.submitSocial}/submit`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result)
+        });
+        Orama.toast('Publicación enviada a revisión', 'success');
+        await loadAll();
+        renderTabContent();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
+      return;
+    }
+    const reviewSocialButton = event.target.closest('[data-review-social]');
+    if (reviewSocialButton) {
+      const post = socialPosts.find((p) => String(p.id) === reviewSocialButton.dataset.reviewSocial);
+      if (post) openSocialReviewModal(post);
+      return;
+    }
+    const publishSocialButton = event.target.closest('[data-publish-social]');
+    if (publishSocialButton) {
+      const confirmed = await Orama.confirm('Esto marca la publicación como lista para publicarse. ¿Continuar?', { okText: 'Sí, preparar' });
+      if (!confirmed) return;
+      const result = await openPinModal({ title: 'Confirma con tu PIN de gerencia', restrictTo: 'management' });
+      if (!result) return;
+      try {
+        await api(`/api/social-posts/${publishSocialButton.dataset.publishSocial}/publish`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result)
+        });
+        Orama.toast('Publicación lista para publicarse', 'success');
+        await loadAll();
+        renderTabContent();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
+      return;
+    }
+    const deleteSocialButton = event.target.closest('[data-delete-social]');
+    if (deleteSocialButton) {
+      const confirmed = await Orama.confirm('¿Eliminar este borrador de publicación?', { danger: true, okText: 'Sí, eliminar' });
+      if (!confirmed) return;
+      try {
+        await api(`/api/social-posts/${deleteSocialButton.dataset.deleteSocial}`, { method: 'DELETE' });
+        Orama.toast('Publicación eliminada', 'success');
+        await loadAll();
+        renderTabContent();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
     }
   }
 
@@ -442,6 +631,7 @@ async function promociones() {
       <button type="button" class="tab-btn" data-tab="borradores" role="tab" aria-selected="false">Borradores</button>
       <button type="button" class="tab-btn" data-tab="pendientes" role="tab" aria-selected="false">Pendientes</button>
       <button type="button" class="tab-btn" data-tab="programadas" role="tab" aria-selected="false">Aprobadas/Programadas</button>
+      <button type="button" class="tab-btn" data-tab="publicaciones" role="tab" aria-selected="false">Publicaciones</button>
       <button type="button" class="tab-btn" data-tab="historial" role="tab" aria-selected="false">Historial</button>
     </nav>
     <div id="promo-tab-content"><div class="panel">${loading}</div></div>`;

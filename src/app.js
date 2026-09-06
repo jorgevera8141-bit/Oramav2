@@ -12,6 +12,8 @@ const staffRoutes = require('./modules/staff/routes');
 const settingsRoutes = require('./modules/settings/routes');
 const gastosRoutes = require('./modules/gastos/routes');
 const promotionsRoutes = require('./modules/promotions/routes');
+const socialPostsRoutes = require('./modules/social-posts/routes');
+const uploadsRoutes = require('./modules/uploads/routes');
 
 const app = express();
 
@@ -30,6 +32,8 @@ app.use('/api', staffRoutes);
 app.use('/api', settingsRoutes);
 app.use('/api', gastosRoutes);
 app.use('/api', promotionsRoutes);
+app.use('/api', socialPostsRoutes);
+app.use('/api', uploadsRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
