@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../../config/database');
 const { closeOrder } = require('./service');
 const { validate } = require('../../middleware/validate');
-const { cerrarSchema } = require('./schemas');
+const { cerrarSchema, cancelarSchema } = require('./schemas');
 
 const router = express.Router();
 
@@ -56,9 +56,10 @@ router.put('/ordenes/:id/cerrar', validate(cerrarSchema), async (req, res) => {
   res.json({ success: true, orden });
 });
 
-router.put('/ordenes/:id/cancelar', async (req, res) => {
+router.put('/ordenes/:id/cancelar', validate(cancelarSchema), async (req, res) => {
   const id = Number(req.params.id);
-  await pool.query('UPDATE ordenes SET status = \'cancelada\' WHERE id = $1', [id]);
+  const { motivo } = req.body || {};
+  await pool.query('UPDATE ordenes SET status = \'cancelada\', notas = COALESCE($2, notas) WHERE id = $1', [id, motivo || null]);
   res.json({ success: true });
 });
 

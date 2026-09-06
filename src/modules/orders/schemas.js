@@ -7,4 +7,8 @@ const cerrarSchema = z.object({
   notas: z.string().max(500).optional()
 });
 
-module.exports = { cerrarSchema };
+const cancelarSchema = z.object({
+  motivo: z.string().max(500).optional()
+});
+
+module.exports = { cerrarSchema, cancelarSchema };

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { cerrarSchema } = require('../src/modules/orders/schemas');
+const { cerrarSchema, cancelarSchema } = require('../src/modules/orders/schemas');
 
 test('cerrarSchema accepts an empty body (barra "listo" sends none)', () => {
   const result = cerrarSchema.safeParse({});
@@ -29,5 +29,20 @@ test('cerrarSchema rejects a negative amount', () => {
 
 test('cerrarSchema rejects notas over 500 characters', () => {
   const result = cerrarSchema.safeParse({ notas: 'x'.repeat(501) });
+  assert.equal(result.success, false);
+});
+
+test('cancelarSchema accepts an empty body (motivo is optional)', () => {
+  const result = cancelarSchema.safeParse({});
+  assert.equal(result.success, true);
+});
+
+test('cancelarSchema accepts a motivo string', () => {
+  const result = cancelarSchema.safeParse({ motivo: 'Cliente cambió de opinión' });
+  assert.equal(result.success, true);
+});
+
+test('cancelarSchema rejects a motivo over 500 characters', () => {
+  const result = cancelarSchema.safeParse({ motivo: 'x'.repeat(501) });
   assert.equal(result.success, false);
 });
