@@ -140,9 +140,14 @@ function promoCard(promo) {
     <p class="subtle">${escapeHtml(PROMO_TIPO_LABELS[promo.tipo] || promo.tipo)} · ${escapeHtml(promoResumenPrecio(promo))}</p>
     ${promo.descripcion ? `<p>${escapeHtml(promo.descripcion)}</p>` : ''}
     <p class="mono subtle">${escapeHtml((promo.fecha_inicio || '').slice(0, 10))} → ${escapeHtml((promo.fecha_fin || '').slice(0, 10))}</p>
+    <p class="subtle">Creada por ${escapeHtml(promo.creado_por)} · ${escapeHtml((promo.created_at || '').slice(0, 10))}</p>
     <div class="action-row">
       ${['DRAFT', 'CHANGES_REQUESTED'].includes(promo.estado) ? `<button type="button" class="button" data-edit-promo="${promo.id}">Editar</button>` : ''}
+      ${['DRAFT', 'CHANGES_REQUESTED'].includes(promo.estado) ? `<button type="button" class="button" data-submit-promo="${promo.id}">Enviar a revisión</button>` : ''}
       ${promo.estado === 'DRAFT' ? `<button type="button" class="button danger" data-delete-promo="${promo.id}">Eliminar</button>` : ''}
+      ${promo.estado === 'PENDING_APPROVAL' ? `<button type="button" class="button" data-review-promo="${promo.id}">Revisar</button>` : ''}
+      ${['APPROVED', 'SCHEDULED'].includes(promo.estado) ? `<button type="button" class="button" data-activate-promo="${promo.id}">Activar ahora</button>` : ''}
+      ${promo.estado === 'ACTIVE' ? `<button type="button" class="button danger" data-deactivate-promo="${promo.id}">Desactivar</button>` : ''}
     </div>
   </article>`;
 }
@@ -179,6 +184,7 @@ async function promociones() {
               <h2>${escapeHtml(activa.nombre)}</h2>
               <p class="promo-hero-price">${escapeHtml(promoResumenPrecio(activa))}</p>
               ${activa.condiciones ? `<p class="subtle">${escapeHtml(activa.condiciones)}</p>` : ''}
+              <div class="action-row"><button type="button" class="button danger" data-deactivate-promo="${activa.id}">Desactivar</button></div>
             </div>
           </section>`
         : `<div class="empty">Sin promoción activa hoy. Crea una promo y espera su aprobación para verla aquí.</div>`;
@@ -247,6 +253,101 @@ async function promociones() {
     });
   }
 
+  function openPinModal({ title, requireNota = false, restrictTo = null }) {
+    return new Promise((resolve) => {
+      closeAnyModal();
+      const options = (restrictTo ? staffList.filter((s) => s.tipo === restrictTo) : staffList);
+      const overlay = document.createElement('div');
+      overlay.className = 'orama-overlay';
+      overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
+        <p class="orama-modal-message">${escapeHtml(title)}</p>
+        <div class="field-group"><label for="pin-actor-nombre">Tu nombre</label>
+          <select class="search" id="pin-actor-nombre">${options.map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
+        </div>
+        <div class="field-group"><label for="pin-actor-pin">Tu PIN</label><input class="search" id="pin-actor-pin" type="password" inputmode="numeric" maxlength="10"></div>
+        ${requireNota ? `<div class="field-group"><label for="pin-nota">Nota</label><input class="search" id="pin-nota" type="text" maxlength="500"></div>` : ''}
+        <div class="orama-modal-actions">
+          <button type="button" class="button" data-ui="cancel">Cancelar</button>
+          <button type="button" class="button" data-ui="confirm">Confirmar</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+      currentOverlay = overlay;
+      const close = (value) => { overlay.remove(); if (currentOverlay === overlay) currentOverlay = null; resolve(value); };
+      overlay.addEventListener('click', (event) => { if (event.target === overlay) close(null); });
+      overlay.querySelector('[data-ui="cancel"]').addEventListener('click', () => close(null));
+      overlay.querySelector('[data-ui="confirm"]').addEventListener('click', () => {
+        const actor_nombre = document.getElementById('pin-actor-nombre').value;
+        const actor_pin = document.getElementById('pin-actor-pin').value;
+        const nota = requireNota ? document.getElementById('pin-nota').value : undefined;
+        if (!actor_pin) { Orama.toast('Ingresa tu PIN', 'error'); return; }
+        close({ actor_nombre, actor_pin, nota });
+      });
+    });
+  }
+
+  function openReviewModal(promo) {
+    closeAnyModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'orama-overlay';
+    overlay.innerHTML = `<div class="orama-modal split-view" role="none" aria-modal="true">
+      <p class="orama-modal-message">Revisar promoción</p>
+      <div class="promo-review-detail">
+        <h3>${escapeHtml(promo.nombre)}</h3>
+        <p class="subtle">${escapeHtml(PROMO_TIPO_LABELS[promo.tipo] || promo.tipo)} · ${escapeHtml(promoResumenPrecio(promo))}</p>
+        ${promo.descripcion ? `<p>${escapeHtml(promo.descripcion)}</p>` : ''}
+        <p class="mono subtle">Vigencia: ${escapeHtml((promo.fecha_inicio || '').slice(0, 10))}${promo.hora_inicio ? ' ' + promo.hora_inicio.slice(0, 5) : ''} → ${escapeHtml((promo.fecha_fin || '').slice(0, 10))}${promo.hora_fin ? ' ' + promo.hora_fin.slice(0, 5) : ''}</p>
+        ${promo.condiciones ? `<p><strong>Condiciones:</strong> ${escapeHtml(promo.condiciones)}</p>` : ''}
+        ${promo.limite_unidades ? `<p><strong>Límite:</strong> ${promo.limite_unidades} unidades</p>` : ''}
+        ${promo.apilable ? '<p><strong>Apilable:</strong> sí</p>' : ''}
+        ${promo.imagen_url ? `<img src="${escapeHtml(promo.imagen_url)}" alt="" style="max-width:100%;border-radius:8px;margin-top:8px">` : ''}
+        <p class="mono subtle">Creada por ${escapeHtml(promo.creado_por)} · ${escapeHtml((promo.created_at || '').slice(0, 10))}</p>
+      </div>
+      <div class="filters">
+        <div class="field-group"><label for="review-accion">Acción</label>
+          <select class="search" id="review-accion">
+            <option value="approve">Aprobar</option>
+            <option value="changes_requested">Solicitar cambios</option>
+            <option value="reject">Rechazar</option>
+          </select>
+        </div>
+        <div class="field-group"><label for="review-actor">Tu nombre (gerencia)</label>
+          <select class="search" id="review-actor">${staffList.filter((s) => s.tipo === 'management').map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
+        </div>
+        <div class="field-group"><label for="review-pin">Tu PIN</label><input class="search" id="review-pin" type="password" inputmode="numeric" maxlength="10"></div>
+        <div class="field-group"><label for="review-nota">Nota (requerida para solicitar cambios)</label><input class="search" id="review-nota" type="text" maxlength="500"></div>
+      </div>
+      <div class="orama-modal-actions">
+        <button type="button" class="button" data-ui="cancel">Cerrar</button>
+        <button type="button" class="button" data-ui="confirm">Confirmar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    currentOverlay = overlay;
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) closeAnyModal(); });
+    overlay.querySelector('[data-ui="cancel"]').addEventListener('click', closeAnyModal);
+    overlay.querySelector('[data-ui="confirm"]').addEventListener('click', async () => {
+      const accion = document.getElementById('review-accion').value;
+      const actor_nombre = document.getElementById('review-actor').value;
+      const actor_pin = document.getElementById('review-pin').value;
+      const nota = document.getElementById('review-nota').value || undefined;
+      if (!actor_pin) { Orama.toast('Ingresa tu PIN', 'error'); return; }
+      if (accion === 'changes_requested' && !nota) { Orama.toast('La nota es requerida para solicitar cambios', 'error'); return; }
+      try {
+        await api(`/api/promotions/${promo.id}/review`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion, actor_nombre, actor_pin, nota })
+        });
+        Orama.toast('Revisión registrada', 'success');
+        closeAnyModal();
+        await loadAll();
+        renderTabContent();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
+    });
+  }
+
   async function onAppClick(event) {
     const tabButton = event.target.closest('[data-tab]');
     if (tabButton) { switchTab(tabButton.dataset.tab); return; }
@@ -264,6 +365,64 @@ async function promociones() {
       try {
         await api(`/api/promotions/${deleteButton.dataset.deletePromo}`, { method: 'DELETE' });
         Orama.toast('Promoción eliminada', 'success');
+        await loadAll();
+        renderTabContent();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
+      return;
+    }
+    const submitButton = event.target.closest('[data-submit-promo]');
+    if (submitButton) {
+      const result = await openPinModal({ title: '¿Enviar esta promoción a revisión?' });
+      if (!result) return;
+      try {
+        await api(`/api/promotions/${submitButton.dataset.submitPromo}/submit`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result)
+        });
+        Orama.toast('Promoción enviada a revisión', 'success');
+        await loadAll();
+        renderTabContent();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
+      return;
+    }
+    const reviewButton = event.target.closest('[data-review-promo]');
+    if (reviewButton) {
+      const promo = promos.find((p) => String(p.id) === reviewButton.dataset.reviewPromo);
+      if (promo) openReviewModal(promo);
+      return;
+    }
+    const activateButton = event.target.closest('[data-activate-promo]');
+    if (activateButton) {
+      const confirmed = await Orama.confirm('¿Activar esta promoción ahora mismo?', { okText: 'Sí, activar' });
+      if (!confirmed) return;
+      const result = await openPinModal({ title: 'Confirma con tu PIN de gerencia', restrictTo: 'management' });
+      if (!result) return;
+      try {
+        await api(`/api/promotions/${activateButton.dataset.activatePromo}/activate`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result)
+        });
+        Orama.toast('Promoción activada', 'success');
+        await loadAll();
+        renderTabContent();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
+      return;
+    }
+    const deactivateButton = event.target.closest('[data-deactivate-promo]');
+    if (deactivateButton) {
+      const confirmed = await Orama.confirm('Esta promoción está activa ahora mismo. ¿Desactivarla?', { danger: true, okText: 'Sí, desactivar' });
+      if (!confirmed) return;
+      const result = await openPinModal({ title: 'Confirma con tu PIN de gerencia', restrictTo: 'management' });
+      if (!result) return;
+      try {
+        await api(`/api/promotions/${deactivateButton.dataset.deactivatePromo}/deactivate`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result)
+        });
+        Orama.toast('Promoción desactivada', 'success');
         await loadAll();
         renderTabContent();
       } catch (error) {

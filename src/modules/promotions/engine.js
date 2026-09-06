@@ -4,13 +4,33 @@ function round2(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+// pg returns DATE columns as JS Date objects (not strings) once they pass through pool.query()
+// directly, before res.json() serializes them. Comparing a Date to a 'YYYY-MM-DD' string with
+// </> silently coerces to NaN (always false both ways), so every date must be normalized to a
+// plain string first — this makes the engine correct regardless of whether it's fed a raw DB row
+// or a plain test fixture.
+function toDateString(value) {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
 function isWithinWindow(promo, now) {
   const today = now.toISOString().slice(0, 10);
-  if (today < promo.fecha_inicio || today > promo.fecha_fin) return false;
+  const fechaInicio = toDateString(promo.fecha_inicio);
+  const fechaFin = toDateString(promo.fecha_fin);
+  if (today < fechaInicio || today > fechaFin) return false;
   const time = now.toISOString().slice(11, 19);
   if (promo.hora_inicio && time < promo.hora_inicio) return false;
   if (promo.hora_fin && time > promo.hora_fin) return false;
   return true;
+}
+
+function hasWindowStarted(promo, now) {
+  const today = now.toISOString().slice(0, 10);
+  const time = now.toISOString().slice(11, 19);
+  const fechaInicio = toDateString(promo.fecha_inicio);
+  if (fechaInicio < today) return true;
+  if (fechaInicio > today) return false;
+  return !promo.hora_inicio || promo.hora_inicio <= time;
 }
 
 function isPromotionEligible(promo, now, redemptionCounts) {
@@ -136,4 +156,4 @@ function applyPromotions({ items, promotions, now = new Date(), redemptionCounts
   return { lineas: outputLines, subtotal, descuento_total: descuentoTotal, total, promociones_aplicadas: aplicadas };
 }
 
-module.exports = { PROMOTION_TIPOS, round2, isWithinWindow, isPromotionEligible, matchesScope, applyPromotions };
+module.exports = { PROMOTION_TIPOS, round2, toDateString, isWithinWindow, hasWindowStarted, isPromotionEligible, matchesScope, applyPromotions };

@@ -1,9 +1,24 @@
 const express = require('express');
 const pool = require('../../config/database');
 const { validate } = require('../../middleware/validate');
-const { createPromotionSchema, updatePromotionSchema } = require('./schemas');
+const { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema } = require('./schemas');
+const { verifyStaffPin } = require('../../shared/pin-auth');
+const { hasWindowStarted, toDateString } = require('./engine');
 
 const router = express.Router();
+
+async function sweepPromotionLifecycle() {
+  await pool.query(`
+    UPDATE promociones SET estado = 'ACTIVE', updated_at = now()
+    WHERE estado = 'SCHEDULED'
+      AND (fecha_inicio < CURRENT_DATE OR (fecha_inicio = CURRENT_DATE AND (hora_inicio IS NULL OR hora_inicio <= CURRENT_TIME)))
+  `);
+  await pool.query(`
+    UPDATE promociones SET estado = 'EXPIRED', updated_at = now()
+    WHERE estado = 'ACTIVE'
+      AND (fecha_fin < CURRENT_DATE OR (fecha_fin = CURRENT_DATE AND hora_fin IS NOT NULL AND hora_fin < CURRENT_TIME))
+  `);
+}
 
 async function getStaffTipo(nombre) {
   const { rows } = await pool.query('SELECT tipo FROM staff WHERE nombre = $1', [nombre]);
@@ -19,6 +34,7 @@ async function logBitacora({ entidadTipo, entidadId, accion, actorNombre, actorT
 }
 
 router.get('/promotions', async (req, res) => {
+  await sweepPromotionLifecycle();
   const estado = typeof req.query.estado === 'string' ? req.query.estado : null;
   const { rows } = estado
     ? await pool.query('SELECT * FROM promociones WHERE estado = $1 ORDER BY created_at DESC', [estado])
@@ -98,6 +114,101 @@ router.put('/promotions/:id', validate(updatePromotionSchema), async (req, res) 
     actorNombre, actorTipo, estadoAnterior: existing.estado, estadoNuevo: updated.estado
   });
   res.json({ success: true, promocion: updated });
+});
+
+router.post('/promotions/:id/submit', validate(pinActionSchema), async (req, res) => {
+  const id = Number(req.params.id);
+  const staffMember = await verifyStaffPin(req.body.actor_nombre, req.body.actor_pin);
+  const { rows } = await pool.query('SELECT * FROM promociones WHERE id = $1', [id]);
+  const promo = rows[0];
+  if (!promo) throw Object.assign(new Error('Promoción no encontrada'), { statusCode: 404 });
+  if (!['DRAFT', 'CHANGES_REQUESTED'].includes(promo.estado)) {
+    throw Object.assign(new Error(`No se puede enviar a revisión una promoción en estado ${promo.estado}.`), { statusCode: 400 });
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  if (toDateString(promo.fecha_fin) < today) {
+    throw Object.assign(new Error('No se puede enviar a revisión una promoción cuya fecha de expiración ya pasó.'), { statusCode: 400 });
+  }
+  const { rows: updatedRows } = await pool.query(
+    "UPDATE promociones SET estado = 'PENDING_APPROVAL', updated_at = now() WHERE id = $1 RETURNING *", [id]
+  );
+  await logBitacora({
+    entidadTipo: 'promocion', entidadId: id, accion: 'enviada_a_revision',
+    actorNombre: staffMember.nombre, actorTipo: staffMember.tipo,
+    estadoAnterior: promo.estado, estadoNuevo: 'PENDING_APPROVAL'
+  });
+  res.json({ success: true, promocion: updatedRows[0] });
+});
+
+router.post('/promotions/:id/review', validate(reviewActionSchema), async (req, res) => {
+  const id = Number(req.params.id);
+  const staffMember = await verifyStaffPin(req.body.actor_nombre, req.body.actor_pin, 'management');
+  const { rows } = await pool.query('SELECT * FROM promociones WHERE id = $1', [id]);
+  const promo = rows[0];
+  if (!promo) throw Object.assign(new Error('Promoción no encontrada'), { statusCode: 404 });
+  if (promo.estado !== 'PENDING_APPROVAL') {
+    throw Object.assign(new Error(`Solo se pueden revisar promociones pendientes de aprobación (estado actual: ${promo.estado}).`), { statusCode: 400 });
+  }
+  let nuevoEstado;
+  if (req.body.accion === 'reject') nuevoEstado = 'REJECTED';
+  else if (req.body.accion === 'changes_requested') nuevoEstado = 'CHANGES_REQUESTED';
+  else nuevoEstado = hasWindowStarted(promo, new Date()) ? 'ACTIVE' : 'SCHEDULED';
+
+  const { rows: updatedRows } = await pool.query(
+    'UPDATE promociones SET estado = $1, updated_at = now() WHERE id = $2 RETURNING *', [nuevoEstado, id]
+  );
+  const accionLabel = { approve: 'aprobada', reject: 'rechazada', changes_requested: 'cambios_solicitados' }[req.body.accion];
+  await logBitacora({
+    entidadTipo: 'promocion', entidadId: id, accion: accionLabel,
+    actorNombre: staffMember.nombre, actorTipo: staffMember.tipo,
+    estadoAnterior: 'PENDING_APPROVAL', estadoNuevo: nuevoEstado,
+    detalle: req.body.nota ? { nota: req.body.nota } : null
+  });
+  res.json({ success: true, promocion: updatedRows[0] });
+});
+
+router.post('/promotions/:id/activate', validate(pinActionSchema), async (req, res) => {
+  const id = Number(req.params.id);
+  const staffMember = await verifyStaffPin(req.body.actor_nombre, req.body.actor_pin, 'management');
+  const { rows } = await pool.query('SELECT * FROM promociones WHERE id = $1', [id]);
+  const promo = rows[0];
+  if (!promo) throw Object.assign(new Error('Promoción no encontrada'), { statusCode: 404 });
+  if (!['APPROVED', 'SCHEDULED'].includes(promo.estado)) {
+    throw Object.assign(new Error(`Solo se pueden activar promociones aprobadas o programadas (estado actual: ${promo.estado}).`), { statusCode: 400 });
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  if (toDateString(promo.fecha_fin) < today) {
+    throw Object.assign(new Error('No se pudo activar la promoción porque la fecha de expiración ya pasó.'), { statusCode: 400 });
+  }
+  const { rows: updatedRows } = await pool.query(
+    "UPDATE promociones SET estado = 'ACTIVE', updated_at = now() WHERE id = $1 RETURNING *", [id]
+  );
+  await logBitacora({
+    entidadTipo: 'promocion', entidadId: id, accion: 'activada',
+    actorNombre: staffMember.nombre, actorTipo: staffMember.tipo,
+    estadoAnterior: promo.estado, estadoNuevo: 'ACTIVE'
+  });
+  res.json({ success: true, promocion: updatedRows[0] });
+});
+
+router.post('/promotions/:id/deactivate', validate(pinActionSchema), async (req, res) => {
+  const id = Number(req.params.id);
+  const staffMember = await verifyStaffPin(req.body.actor_nombre, req.body.actor_pin, 'management');
+  const { rows } = await pool.query('SELECT * FROM promociones WHERE id = $1', [id]);
+  const promo = rows[0];
+  if (!promo) throw Object.assign(new Error('Promoción no encontrada'), { statusCode: 404 });
+  if (!['ACTIVE', 'SCHEDULED', 'APPROVED'].includes(promo.estado)) {
+    throw Object.assign(new Error(`No se puede desactivar una promoción en estado ${promo.estado}.`), { statusCode: 400 });
+  }
+  const { rows: updatedRows } = await pool.query(
+    "UPDATE promociones SET estado = 'CANCELLED', updated_at = now() WHERE id = $1 RETURNING *", [id]
+  );
+  await logBitacora({
+    entidadTipo: 'promocion', entidadId: id, accion: 'desactivada',
+    actorNombre: staffMember.nombre, actorTipo: staffMember.tipo,
+    estadoAnterior: promo.estado, estadoNuevo: 'CANCELLED'
+  });
+  res.json({ success: true, promocion: updatedRows[0] });
 });
 
 router.delete('/promotions/:id', async (req, res) => {

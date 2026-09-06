@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createPromotionSchema } = require('../src/modules/promotions/schemas');
+const { createPromotionSchema, reviewActionSchema } = require('../src/modules/promotions/schemas');
 
 function validBase(overrides) {
   return {
@@ -69,4 +69,29 @@ test('rejects a missing creado_por', () => {
 test('rejects a porcentaje_descuento over 100', () => {
   const data = validBase({ tipo: 'descuento_porcentaje', precio_promocional: undefined, porcentaje_descuento: 150 });
   assert.equal(createPromotionSchema.safeParse(data).success, false);
+});
+
+test('reviewActionSchema accepts an approve action with just actor credentials', () => {
+  const data = { actor_nombre: 'Erika', actor_pin: '1234', accion: 'approve' };
+  assert.equal(reviewActionSchema.safeParse(data).success, true);
+});
+
+test('reviewActionSchema requires a nota when requesting changes', () => {
+  const data = { actor_nombre: 'Erika', actor_pin: '1234', accion: 'changes_requested' };
+  assert.equal(reviewActionSchema.safeParse(data).success, false);
+});
+
+test('reviewActionSchema accepts changes_requested when a nota is provided', () => {
+  const data = { actor_nombre: 'Erika', actor_pin: '1234', accion: 'changes_requested', nota: 'Ajustar el precio' };
+  assert.equal(reviewActionSchema.safeParse(data).success, true);
+});
+
+test('reviewActionSchema rejects a missing actor_pin', () => {
+  const data = { actor_nombre: 'Erika', accion: 'reject' };
+  assert.equal(reviewActionSchema.safeParse(data).success, false);
+});
+
+test('reviewActionSchema rejects an unknown accion', () => {
+  const data = { actor_nombre: 'Erika', actor_pin: '1234', accion: 'delete_everything' };
+  assert.equal(reviewActionSchema.safeParse(data).success, false);
 });

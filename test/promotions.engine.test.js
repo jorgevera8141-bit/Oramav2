@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { applyPromotions, isWithinWindow, isPromotionEligible } = require('../src/modules/promotions/engine');
+const { applyPromotions, isWithinWindow, isPromotionEligible, hasWindowStarted } = require('../src/modules/promotions/engine');
 
 const NOW = new Date('2026-09-06T18:00:00.000Z');
 
@@ -165,6 +165,41 @@ test('isWithinWindow rejects a date outside the promotion range', () => {
 test('isPromotionEligible rejects an expired promotion even without a limit', () => {
   const promo = basePromo({ fecha_inicio: '2026-01-01', fecha_fin: '2026-01-02' });
   assert.equal(isPromotionEligible(promo, NOW, {}), false);
+});
+
+test('hasWindowStarted is true once fecha_inicio is today and hora_inicio has passed', () => {
+  const promo = basePromo({ fecha_inicio: '2026-09-06', hora_inicio: '10:00:00' });
+  assert.equal(hasWindowStarted(promo, NOW), true); // NOW is 18:00 UTC
+});
+
+test('hasWindowStarted is false when hora_inicio is later today', () => {
+  const promo = basePromo({ fecha_inicio: '2026-09-06', hora_inicio: '22:00:00' });
+  assert.equal(hasWindowStarted(promo, NOW), false);
+});
+
+test('hasWindowStarted is false when fecha_inicio is a future date', () => {
+  const promo = basePromo({ fecha_inicio: '2026-09-10' });
+  assert.equal(hasWindowStarted(promo, NOW), false);
+});
+
+test('hasWindowStarted is true when fecha_inicio is a past date regardless of hora_inicio', () => {
+  const promo = basePromo({ fecha_inicio: '2026-09-01', hora_inicio: '23:59:00' });
+  assert.equal(hasWindowStarted(promo, NOW), true);
+});
+
+test('regression: hasWindowStarted handles fecha_inicio as a raw pg Date object, not just a string', () => {
+  // pg returns DATE columns as JS Date objects before res.json() serializes them; comparing a
+  // Date to a 'YYYY-MM-DD' string with </> used to silently coerce to NaN (always false), making
+  // a future-dated promotion appear as if it had already started. See engine.js's toDateString.
+  const futurePromo = basePromo({ fecha_inicio: new Date('2026-12-01T08:00:00.000Z'), hora_inicio: null });
+  assert.equal(hasWindowStarted(futurePromo, NOW), false);
+  const pastPromo = basePromo({ fecha_inicio: new Date('2026-01-01T08:00:00.000Z'), hora_inicio: null });
+  assert.equal(hasWindowStarted(pastPromo, NOW), true);
+});
+
+test('regression: isWithinWindow handles fecha_inicio/fecha_fin as raw pg Date objects', () => {
+  const promo = basePromo({ fecha_inicio: new Date('2026-12-01T08:00:00.000Z'), fecha_fin: new Date('2026-12-31T08:00:00.000Z') });
+  assert.equal(isWithinWindow(promo, NOW), false);
 });
 
 test('no eligible promotions leaves the order at full price', () => {

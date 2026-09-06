@@ -49,4 +49,16 @@ const createPromotionSchema = z.object(promotionFields)
 
 const updatePromotionSchema = z.object(promotionFields).partial();
 
-module.exports = { createPromotionSchema, updatePromotionSchema };
+const pinActionSchema = z.object({
+  actor_nombre: z.string().min(1).max(120),
+  actor_pin: z.string().min(1).max(20)
+});
+
+const reviewActionSchema = pinActionSchema.extend({
+  accion: z.enum(['approve', 'reject', 'changes_requested']),
+  nota: z.string().max(500).optional()
+}).refine((data) => data.accion !== 'changes_requested' || !!data.nota, {
+  message: 'Se requiere una nota explicando los cambios solicitados', path: ['nota']
+});
+
+module.exports = { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema };
