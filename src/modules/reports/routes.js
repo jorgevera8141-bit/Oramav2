@@ -1,7 +1,28 @@
 const express = require('express');
 const pool = require('../../config/database');
+const { parseDateParam } = require('../../shared/dates');
 
 const router = express.Router();
+
+router.get('/resumen', async (req, res) => {
+  const date = parseDateParam(req.query.date);
+  const dateFilter = date ? '$1' : 'CURRENT_DATE';
+  const params = date ? [date] : [];
+  const { rows: [summary] } = await pool.query(
+    `SELECT COUNT(*)::int AS ordenes,
+            COALESCE(SUM(total), 0) AS total,
+            COALESCE(SUM(amount_cash), 0) AS total_efectivo,
+            COALESCE(SUM(amount_card), 0) AS total_tarjeta
+     FROM ordenes
+     WHERE status = 'cerrada' AND closed_at::date = ${dateFilter}`,
+    params
+  );
+  const { rows: ordenesLista } = await pool.query(
+    `SELECT * FROM ordenes WHERE status = 'cerrada' AND closed_at::date = ${dateFilter} ORDER BY closed_at DESC`,
+    params
+  );
+  res.json({ success: true, ...summary, ordenes_lista: ordenesLista });
+});
 
 router.get('/reportes', async (_req, res) => {
   const { rows } = await pool.query('SELECT COUNT(*)::int AS orders, COALESCE(SUM(total),0) AS total FROM ordenes');

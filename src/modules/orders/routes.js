@@ -3,6 +3,7 @@ const pool = require('../../config/database');
 const { closeOrder } = require('./service');
 const { validate } = require('../../middleware/validate');
 const { cerrarSchema, cancelarSchema } = require('./schemas');
+const { parseDateParam } = require('../../shared/dates');
 
 const router = express.Router();
 
@@ -11,10 +12,11 @@ router.get('/ordenes', async (_req, res) => {
   res.json({ success: true, ordenes: rows });
 });
 
-router.get('/ordenes/dia', async (_req, res) => {
-  const { rows } = await pool.query(
-    'SELECT * FROM ordenes WHERE created_at::date = CURRENT_DATE ORDER BY created_at DESC'
-  );
+router.get('/ordenes/dia', async (req, res) => {
+  const date = parseDateParam(req.query.date);
+  const { rows } = date
+    ? await pool.query('SELECT * FROM ordenes WHERE created_at::date = $1 ORDER BY created_at DESC', [date])
+    : await pool.query('SELECT * FROM ordenes WHERE created_at::date = CURRENT_DATE ORDER BY created_at DESC');
   res.json({ success: true, ordenes: rows });
 });
 
