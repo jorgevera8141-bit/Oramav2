@@ -1,19 +1,30 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
-// Caption generation is short-form copywriting, not a reasoning task — Sonnet is
-// the sensible default. Override with ANTHROPIC_MODEL (e.g. claude-haiku-4-5 for
-// lower cost, claude-opus-5 for maximum quality).
-const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+// When NINEROUTER_URL is set, both AI calls route through a 9Router gateway
+// (OpenAI/Anthropic-compatible, one key, auto-fallback across providers).
+// Otherwise they hit the Anthropic API directly.
+const NINEROUTER_URL = (process.env.NINEROUTER_URL || '').replace(/\/$/, '');
+const VIA_9ROUTER = !!NINEROUTER_URL;
+
+const AI_MODEL = VIA_9ROUTER
+  ? (process.env.NINEROUTER_CHAT_MODEL || 'cc/claude-opus-4-7')
+  : (process.env.ANTHROPIC_MODEL || 'claude-sonnet-5');
+const AI_BACKEND = VIA_9ROUTER ? '9router' : 'anthropic';
 
 let client = null;
 function getClient() {
+  if (client) return client;
+  if (VIA_9ROUTER) {
+    client = new Anthropic({ baseURL: NINEROUTER_URL, apiKey: process.env.NINEROUTER_KEY || 'no-auth' });
+    return client;
+  }
   if (!process.env.ANTHROPIC_API_KEY) {
     throw Object.assign(
-      new Error('La generación de texto con IA no está configurada (falta ANTHROPIC_API_KEY).'),
+      new Error('La generación de texto con IA no está configurada (define NINEROUTER_URL o ANTHROPIC_API_KEY).'),
       { statusCode: 503 }
     );
   }
-  if (!client) client = new Anthropic();
+  client = new Anthropic();
   return client;
 }
 
@@ -54,14 +65,37 @@ function parseJsonLoose(text) {
   return JSON.parse(cleaned);
 }
 
+function wrapSdkError(err) {
+  const where = VIA_9ROUTER ? '9Router' : 'el servicio de IA';
+  if (err instanceof Anthropic.APIConnectionError) {
+    return Object.assign(new Error(`No se pudo contactar a ${where}.`), { statusCode: 502 });
+  }
+  if (err instanceof Anthropic.AuthenticationError) {
+    return Object.assign(new Error('Credenciales de IA inválidas (revisa NINEROUTER_KEY / ANTHROPIC_API_KEY).'), { statusCode: 502 });
+  }
+  if (err instanceof Anthropic.RateLimitError) {
+    return Object.assign(new Error(`${where} está saturado. Intenta en un momento.`), { statusCode: 503 });
+  }
+  if (err instanceof Anthropic.APIError) {
+    const status = err.status >= 400 && err.status < 600 ? err.status : 502;
+    return Object.assign(new Error(err.message || `${where} devolvió un error.`), { statusCode: status });
+  }
+  return err;
+}
+
 async function generateCopy(promo) {
   const anthropic = getClient();
-  const message = await anthropic.messages.create({
-    model: AI_MODEL,
-    max_tokens: 800,
-    system: SYSTEM,
-    messages: [{ role: 'user', content: buildCopyPrompt(promo) }]
-  });
+  let message;
+  try {
+    message = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: 800,
+      system: SYSTEM,
+      messages: [{ role: 'user', content: buildCopyPrompt(promo) }]
+    });
+  } catch (err) {
+    throw wrapSdkError(err);
+  }
   const text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
   let parsed;
   try {
@@ -77,4 +111,4 @@ async function generateCopy(promo) {
   };
 }
 
-module.exports = { generateCopy, buildCopyPrompt, parseJsonLoose, resumenPrecio, AI_MODEL };
+module.exports = { generateCopy, buildCopyPrompt, parseJsonLoose, resumenPrecio, AI_MODEL, AI_BACKEND };

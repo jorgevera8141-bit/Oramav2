@@ -5,8 +5,8 @@ const { verifyStaffPin } = require('../../shared/pin-auth');
 const { logBitacora, getStaffTipo } = require('../../shared/audit');
 const { createSocialPostSchema, updateSocialPostSchema, pinActionSchema, reviewActionSchema, aiDraftSchema, aiImageSchema } = require('./schemas');
 const { estadoTrasAprobacion, publishToProviders } = require('./service');
-const { generateCopy, AI_MODEL } = require('./ai');
-const { generateImage, FAL_MODEL } = require('./image-gen');
+const { generateCopy, AI_MODEL, AI_BACKEND } = require('./ai');
+const { generateImage, IMAGE_MODEL, IMAGE_BACKEND } = require('./image-gen');
 const { assertUnderDailyLimit } = require('./ai-usage');
 
 const router = express.Router();
@@ -39,7 +39,7 @@ router.post('/social-posts/ai/draft', validate(aiDraftSchema), async (req, res) 
   const copy = await generateCopy(promo);
   await logBitacora({
     entidadTipo: 'ai_generacion', entidadId: promo.id, accion: 'texto',
-    actorNombre: staff.nombre, actorTipo: staff.tipo, detalle: { model: AI_MODEL }
+    actorNombre: staff.nombre, actorTipo: staff.tipo, detalle: { model: AI_MODEL, via: AI_BACKEND }
   });
   res.json({ success: true, ...copy });
 });
@@ -51,7 +51,7 @@ router.post('/social-posts/ai/image', validate(aiImageSchema), async (req, res) 
   const result = await generateImage(promo, req.body.prompt);
   await logBitacora({
     entidadTipo: 'ai_generacion', entidadId: promo.id, accion: 'imagen',
-    actorNombre: staff.nombre, actorTipo: staff.tipo, detalle: { model: FAL_MODEL, prompt: result.prompt }
+    actorNombre: staff.nombre, actorTipo: staff.tipo, detalle: { model: IMAGE_MODEL, via: IMAGE_BACKEND, prompt: result.prompt }
   });
   res.json({ success: true, url: result.url, width: result.width, height: result.height });
 });
