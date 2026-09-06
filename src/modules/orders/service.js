@@ -15,6 +15,13 @@ async function deductInventoryForOrder(client, orderId) {
   }
 }
 
+function aggregatePagos(pagos) {
+  return pagos.reduce((totals, pago) => ({
+    amount_cash: totals.amount_cash + Number(pago.amount_cash || 0),
+    amount_card: totals.amount_card + Number(pago.amount_card || 0)
+  }), { amount_cash: 0, amount_card: 0 });
+}
+
 async function closeOrder(orderId, payload = {}) {
   const client = await pool.connect();
   try {
@@ -25,7 +32,25 @@ async function closeOrder(orderId, payload = {}) {
     if (order.status === 'cerrada') { await client.query('COMMIT'); return order; }
     if (order.status === 'cancelada') throw Object.assign(new Error('La orden está cancelada'), { statusCode: 409 });
     await deductInventoryForOrder(client, orderId);
-    const result = await client.query("UPDATE ordenes SET status = 'cerrada', closed_at = NOW(), payment_method = COALESCE($2, payment_method), amount_cash = COALESCE($3, amount_cash), amount_card = COALESCE($4, amount_card), notas = COALESCE($5, notas) WHERE id = $1 RETURNING *", [orderId, payload.payment_method, payload.amount_cash, payload.amount_card, payload.notas]);
+
+    let paymentMethod = payload.payment_method;
+    let amountCash = payload.amount_cash;
+    let amountCard = payload.amount_card;
+
+    if (payload.pagos && payload.pagos.length) {
+      for (const pago of payload.pagos) {
+        await client.query(
+          'INSERT INTO orden_pagos (orden_id, payment_method, amount_cash, amount_card, persona_nombre) VALUES ($1,$2,$3,$4,$5)',
+          [orderId, pago.payment_method, pago.amount_cash || 0, pago.amount_card || 0, pago.persona_nombre || null]
+        );
+      }
+      const totals = aggregatePagos(payload.pagos);
+      paymentMethod = 'dividido';
+      amountCash = totals.amount_cash;
+      amountCard = totals.amount_card;
+    }
+
+    const result = await client.query("UPDATE ordenes SET status = 'cerrada', closed_at = NOW(), payment_method = COALESCE($2, payment_method), amount_cash = COALESCE($3, amount_cash), amount_card = COALESCE($4, amount_card), notas = COALESCE($5, notas) WHERE id = $1 RETURNING *", [orderId, paymentMethod, amountCash, amountCard, payload.notas]);
     if (order.mesa_id) await client.query("UPDATE mesas SET status = 'disponible' WHERE id = $1", [order.mesa_id]);
     await client.query('COMMIT');
     await notify(process.env.NTFY_ORDER_TOPIC || 'orama-orders', `Orden ${orderId} cerrada`, 'Orden cerrada');
@@ -33,4 +58,4 @@ async function closeOrder(orderId, payload = {}) {
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
-module.exports = { closeOrder, deductInventoryForOrder };
+module.exports = { closeOrder, deductInventoryForOrder, aggregatePagos };

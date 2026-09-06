@@ -50,6 +50,7 @@ async function cashier() {
           <p class="subtle" style="margin:0 0 12px">${new Date(order.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p>
           <div class="action-row">
             <button type="button" class="button" data-pay-id="${order.id}" aria-label="Cobrar orden de ${escapeHtml(order.mesa_nombre || 'Mostrador')}">Cobrar</button>
+            <button type="button" class="button" data-split-id="${order.id}" aria-label="Dividir cuenta de ${escapeHtml(order.mesa_nombre || 'Mostrador')}">Dividir</button>
             <button type="button" class="button danger" data-cancel-id="${order.id}" aria-label="Cancelar orden de ${escapeHtml(order.mesa_nombre || 'Mostrador')}">Cancelar</button>
           </div>
         </article>`).join('') : '<div class="empty">No hay órdenes activas</div>';
@@ -98,12 +99,12 @@ async function cashier() {
       <div class="pay-highlight"><p class="pay-highlight-label">Cliente frecuente</p><p class="pay-highlight-value">Sin cargo</p></div>`;
   }
 
-  function wireFieldEvents(order) {
+  function wireFieldEvents(total) {
     const efectivoInput = document.getElementById('pay-efectivo');
     if (efectivoInput) {
       efectivoInput.addEventListener('input', () => {
         const received = Number(efectivoInput.value || 0);
-        const diff = received - Number(order.total);
+        const diff = received - Number(total);
         const el = document.getElementById('pay-cambio');
         el.textContent = `${money.format(Math.abs(diff))}${diff < 0 ? ' (faltan)' : ''}`;
         el.classList.toggle('negative', diff < 0);
@@ -115,7 +116,7 @@ async function cashier() {
       const recalc = () => {
         const ef = Number(mixtoEfectivo.value || 0);
         const ta = Number(mixtoTarjeta.value || 0);
-        const remaining = Number(order.total) - ef - ta;
+        const remaining = Number(total) - ef - ta;
         const el = document.getElementById('pay-mixto-restante');
         el.textContent = remaining > 0 ? `${money.format(remaining)} pendiente` : remaining < 0 ? `${money.format(Math.abs(remaining))} cambio` : '✔ exacto';
         el.classList.toggle('negative', remaining > 0);
@@ -310,7 +311,7 @@ async function cashier() {
       </div>`;
     document.body.appendChild(overlay);
     currentOverlay = overlay;
-    wireFieldEvents(order);
+    wireFieldEvents(order.total);
 
     overlay.addEventListener('click', (event) => {
       const methodButton = event.target.closest('[data-method]');
@@ -318,12 +319,183 @@ async function cashier() {
         method = methodButton.dataset.method;
         overlay.querySelectorAll('#pay-methods .pill').forEach((pill) => pill.classList.toggle('active', pill.dataset.method === method));
         document.getElementById('pay-fields').innerHTML = paymentFieldsMarkup(method, order.total);
-        wireFieldEvents(order);
+        wireFieldEvents(order.total);
         return;
       }
       if (event.target.closest('[data-pay-cancel]') || event.target === overlay) { closeAnyModal(); return; }
       if (event.target.closest('[data-pay-confirm]')) confirmPayment(order, method);
     });
+  }
+
+  function openSplitFlow(order) {
+    closeAnyModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'orama-overlay';
+    overlay.innerHTML = '<div class="orama-modal split-view" id="split-body" role="none" aria-modal="true"></div>';
+    document.body.appendChild(overlay);
+    currentOverlay = overlay;
+    const body = overlay.querySelector('#split-body');
+
+    let items = [];
+    let persons = [];
+    let personCounter = 0;
+    let payingPersonId = null;
+    let payingMethod = 'efectivo';
+
+    function personSubtotal(personId) {
+      return items.filter((item) => item.personId === personId).reduce((sum, item) => sum + item.precio, 0);
+    }
+
+    function renderMain() {
+      const paidCount = persons.filter((p) => p.paid).length;
+      const allPaid = persons.length > 0 && persons.every((p) => p.paid);
+      const unassigned = items.filter((item) => !item.personId);
+
+      const personsHtml = persons.map((person) => {
+        const personItems = items.filter((item) => item.personId === person.id);
+        const subtotal = personItems.reduce((sum, item) => sum + item.precio, 0);
+        return `<div class="order-card" style="margin-bottom:10px">
+          <div class="order-card-head"><h2 class="order-card-mesa" style="font-size:16px">${escapeHtml(person.name)}</h2><span class="mono">${money.format(subtotal)}</span></div>
+          <p class="subtle" style="margin:0 0 10px">${person.paid ? '✅ Pagado' : 'Pendiente'}</p>
+          ${personItems.length ? `<ul class="order-card-items">${personItems.map((item) => `<li style="justify-content:space-between"><span>${escapeHtml(item.nombre)}</span><span class="mono">${money.format(item.precio)}</span>${!person.paid ? `<button type="button" class="button danger" style="min-height:32px;width:auto;padding:2px 10px" data-unassign="${item.id}">×</button>` : ''}</li>`).join('')}</ul>` : '<p class="subtle">Sin artículos</p>'}
+          ${!person.paid && subtotal > 0 ? `<button type="button" class="button" data-pay-person="${person.id}">Cobrar ${money.format(subtotal)}</button>` : ''}
+        </div>`;
+      }).join('');
+
+      const unassignedHtml = unassigned.length
+        ? unassigned.map((item) => `<div class="menu-item-card"><div><p class="menu-item-card-name">${escapeHtml(item.nombre)}</p><p class="menu-item-card-price">${money.format(item.precio)}</p></div><div class="filters">${persons.map((p) => `<button type="button" class="pill" data-assign-item="${item.id}" data-assign-person="${p.id}">${escapeHtml(p.name)}</button>`).join('')}</div></div>`).join('')
+        : (persons.length ? '<p class="subtle">Todos los artículos asignados</p>' : '<p class="subtle">Agrega personas para asignar artículos</p>');
+
+      body.innerHTML = `
+        <p class="orama-modal-message">✂️ Dividir cuenta</p>
+        <p class="subtle" style="margin-bottom:14px">Total orden: ${money.format(order.total)}</p>
+        <div class="field-group">
+          <label for="split-equal-n">División igualitaria</label>
+          <div style="display:flex;gap:9px">
+            <input class="search" id="split-equal-n" type="number" min="2" max="20" placeholder="2" style="max-width:100px">
+            <button type="button" class="button" data-equal-split>Dividir en partes iguales</button>
+          </div>
+        </div>
+        <button type="button" class="button" style="width:100%;margin-bottom:14px" data-add-person>+ Agregar persona</button>
+        <div id="split-persons">${personsHtml || '<p class="subtle">Sin personas agregadas</p>'}</div>
+        <p class="eyebrow" style="margin-top:14px">Artículos sin asignar</p>
+        <div id="split-unassigned">${unassignedHtml}</div>
+        <p class="subtle" style="text-align:center;margin:14px 0">${paidCount} de ${persons.length} pagado${persons.length !== 1 ? 's' : ''}</p>
+        <div class="orama-modal-actions">
+          <button type="button" class="button" data-split-close>Cerrar</button>
+          <button type="button" class="button" data-close-split-order ${allPaid && unassigned.length === 0 && persons.length > 0 ? '' : 'disabled'}>Cerrar orden completa</button>
+        </div>`;
+    }
+
+    function renderPersonPayment() {
+      const person = persons.find((p) => p.id === payingPersonId);
+      const subtotal = personSubtotal(payingPersonId);
+      body.innerHTML = `
+        <p class="subtle" style="margin:0 0 4px">${escapeHtml(person.name)}</p>
+        <p class="orama-modal-message" style="font:700 28px 'JetBrains Mono',monospace;color:var(--cream)">${money.format(subtotal)}</p>
+        <div class="filters" id="split-pay-methods" style="margin-bottom:16px">${PAYMENT_METHODS.map((m) => `<button type="button" class="pill ${m.id === payingMethod ? 'active' : ''}" data-split-method="${m.id}">${m.label}</button>`).join('')}</div>
+        <div id="pay-fields">${paymentFieldsMarkup(payingMethod, subtotal)}</div>
+        <div class="orama-modal-actions">
+          <button type="button" class="button" data-split-pay-cancel>Cancelar</button>
+          <button type="button" class="button" data-split-pay-confirm>Confirmar cobro</button>
+        </div>`;
+      wireFieldEvents(subtotal);
+    }
+
+    function confirmPersonPayment() {
+      const person = persons.find((p) => p.id === payingPersonId);
+      const subtotal = personSubtotal(payingPersonId);
+      let amount_cash = 0;
+      let amount_card = 0;
+      if (payingMethod === 'efectivo') {
+        const received = Number(document.getElementById('pay-efectivo')?.value || 0);
+        if (received < subtotal) { Orama.toast('La cantidad recibida es menor al total', 'warning'); return; }
+        amount_cash = subtotal;
+      } else if (payingMethod === 'tarjeta') {
+        amount_card = subtotal;
+      } else if (payingMethod === 'mixto') {
+        const ef = Number(document.getElementById('pay-mixto-efectivo')?.value || 0);
+        const ta = Number(document.getElementById('pay-mixto-tarjeta')?.value || 0);
+        if (ef + ta < subtotal) { Orama.toast('La suma no cubre el total', 'warning'); return; }
+        amount_cash = ef;
+        amount_card = ta;
+      }
+      person.paid = true;
+      person.pago = { payment_method: payingMethod, amount_cash, amount_card, persona_nombre: person.name };
+      Orama.toast(`${person.name}: cobro registrado`, 'success');
+      payingPersonId = null;
+      renderMain();
+    }
+
+    async function closeSplitOrder() {
+      const button = body.querySelector('[data-close-split-order]');
+      if (button) { button.disabled = true; button.textContent = 'Cerrando…'; }
+      try {
+        const pagos = persons.map((p) => p.pago).filter(Boolean);
+        await api(`/api/ordenes/${order.id}/cerrar`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pagos }) });
+        closeAnyModal();
+        Orama.toast('Orden dividida cerrada correctamente', 'success');
+        await loadActivas();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+        if (button) { button.disabled = false; button.textContent = 'Cerrar orden completa'; }
+      }
+    }
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay || event.target.closest('[data-split-close]')) { closeAnyModal(); return; }
+      if (event.target.closest('[data-add-person]')) {
+        personCounter += 1;
+        persons.push({ id: personCounter, name: `Persona ${personCounter}`, paid: false, pago: null });
+        renderMain();
+        return;
+      }
+      if (event.target.closest('[data-equal-split]')) {
+        const n = Number(document.getElementById('split-equal-n')?.value || 0);
+        if (n < 2) { Orama.toast('Mínimo 2 personas', 'warning'); return; }
+        persons = [];
+        personCounter = 0;
+        for (let i = 0; i < n; i++) { personCounter += 1; persons.push({ id: personCounter, name: `Persona ${personCounter}`, paid: false, pago: null }); }
+        items.forEach((item, index) => { item.personId = persons[index % n].id; });
+        renderMain();
+        return;
+      }
+      const assignBtn = event.target.closest('[data-assign-item]');
+      if (assignBtn) {
+        const item = items.find((i) => i.id === assignBtn.dataset.assignItem);
+        if (item) item.personId = Number(assignBtn.dataset.assignPerson);
+        renderMain();
+        return;
+      }
+      const unassignBtn = event.target.closest('[data-unassign]');
+      if (unassignBtn) {
+        const item = items.find((i) => i.id === unassignBtn.dataset.unassign);
+        if (item) item.personId = null;
+        renderMain();
+        return;
+      }
+      const payPersonBtn = event.target.closest('[data-pay-person]');
+      if (payPersonBtn) { payingPersonId = Number(payPersonBtn.dataset.payPerson); payingMethod = 'efectivo'; renderPersonPayment(); return; }
+      const splitMethodBtn = event.target.closest('[data-split-method]');
+      if (splitMethodBtn) { payingMethod = splitMethodBtn.dataset.splitMethod; renderPersonPayment(); return; }
+      if (event.target.closest('[data-split-pay-cancel]')) { payingPersonId = null; renderMain(); return; }
+      if (event.target.closest('[data-split-pay-confirm]')) { confirmPersonPayment(); return; }
+      const closeSplitBtn = event.target.closest('[data-close-split-order]');
+      if (closeSplitBtn && !closeSplitBtn.disabled) closeSplitOrder();
+    });
+
+    (async () => {
+      try {
+        const data = await api(`/api/ordenes/${order.id}/items`);
+        const raw = data.items || [];
+        raw.forEach((rawItem) => {
+          for (let i = 0; i < Number(rawItem.cantidad); i++) items.push({ id: `${rawItem.id}_${i}`, nombre: rawItem.item_nombre, precio: Number(rawItem.precio), personId: null });
+        });
+        renderMain();
+      } catch (error) {
+        body.innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
+      }
+    })();
   }
 
   async function cancelOrder(id) {
@@ -345,6 +517,12 @@ async function cashier() {
     if (payButton) {
       const order = activasCache.find((o) => o.id === Number(payButton.dataset.payId));
       if (order) renderPaymentModal(order);
+      return;
+    }
+    const splitButton = event.target.closest('[data-split-id]');
+    if (splitButton) {
+      const order = activasCache.find((o) => o.id === Number(splitButton.dataset.splitId));
+      if (order) openSplitFlow(order);
       return;
     }
     const cancelButton = event.target.closest('[data-cancel-id]');

@@ -137,6 +137,16 @@ async function initDb() {
     key TEXT PRIMARY KEY,
     value TEXT
   )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS orden_pagos (
+    id SERIAL PRIMARY KEY,
+    orden_id INTEGER REFERENCES ordenes(id),
+    payment_method TEXT NOT NULL,
+    amount_cash NUMERIC NOT NULL DEFAULT 0,
+    amount_card NUMERIC NOT NULL DEFAULT 0,
+    persona_nombre TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_orden_pagos_orden ON orden_pagos(orden_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_inv_mov_item ON inventory_movements(inventory_item_id, created_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_inv_mov_reason ON inventory_movements(reason)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_inv_mov_order ON inventory_movements(order_id)');
