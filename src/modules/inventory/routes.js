@@ -1,6 +1,8 @@
 const express = require('express');
 const pool = require('../../config/database');
 const { notify } = require('../../shared/ntfy');
+const { validate } = require('../../middleware/validate');
+const { createInventoryItemSchema, updateInventoryItemSchema } = require('./schemas');
 
 const router = express.Router();
 
@@ -9,7 +11,7 @@ router.get('/inventory', async (_req, res) => {
   res.json({ success: true, inventory: rows });
 });
 
-router.post('/inventory', async (req, res) => {
+router.post('/inventory', validate(createInventoryItemSchema), async (req, res) => {
   const b = req.body || {};
   const { rows } = await pool.query(
     `INSERT INTO inventory_items
@@ -20,7 +22,7 @@ router.post('/inventory', async (req, res) => {
   res.status(201).json({ success: true, item: rows[0] });
 });
 
-router.put('/inventory/:id', async (req, res) => {
+router.put('/inventory/:id', validate(updateInventoryItemSchema), async (req, res) => {
   const b = req.body || {};
   const { rows } = await pool.query(
     `UPDATE inventory_items
@@ -40,7 +42,7 @@ router.put('/inventory/:id', async (req, res) => {
 
 router.delete('/inventory/:id', async (req, res) => {
   await pool.query('DELETE FROM inventory_items WHERE id = $1', [Number(req.params.id)]);
-  res.status(204).end();
+  res.json({ success: true });
 });
 
 router.post('/inventory/:id/restock', async (req, res) => {
