@@ -1,18 +1,8 @@
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
 const multer = require('multer');
-const sharp = require('sharp');
-
-// Ephemeral on a bare container; in production this path is a mounted Railway
-// Volume so processed images survive redeploys. Created on boot either way.
-const UPLOAD_DIR = path.join(__dirname, '..', '..', '..', 'public', 'uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const { processImageToJpeg } = require('./process');
 
 const MAX_BYTES = 8 * 1024 * 1024;
-const MAX_DIMENSION = 1600;
-const JPEG_QUALITY = 82;
 const ACCEPTED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
 
 const upload = multer({
@@ -39,21 +29,8 @@ router.post('/uploads/image', (req, res, next) => {
   });
 }, async (req, res, next) => {
   try {
-    const filename = `${crypto.randomUUID()}.jpg`;
-    const outputPath = path.join(UPLOAD_DIR, filename);
-    // sharp's toFile() resolves with the info object directly (not { info }).
-    const info = await sharp(req.file.buffer)
-      .rotate() // honor EXIF orientation before stripping metadata
-      .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
-      .toFile(outputPath);
-    res.status(201).json({
-      success: true,
-      url: `/uploads/${filename}`,
-      width: info.width,
-      height: info.height,
-      bytes: info.size
-    });
+    const saved = await processImageToJpeg(req.file.buffer);
+    res.status(201).json({ success: true, ...saved });
   } catch (error) {
     next(Object.assign(new Error('La imagen está dañada o no se pudo procesar.'), { statusCode: 400, cause: error }));
   }

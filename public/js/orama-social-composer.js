@@ -76,6 +76,11 @@
       <p class="orama-modal-message">${existingPost ? 'Editar publicación' : 'Crear publicación'} · ${escapeHtml(promo?.nombre || '')}</p>
       <div class="sc-grid">
         <div class="sc-form">
+          <div class="sc-ai-row">
+            <button type="button" class="button sc-ai-btn" data-ai="draft">✨ Generar texto</button>
+            <button type="button" class="button sc-ai-btn" data-ai="image">✨ Generar imagen</button>
+            <input class="search sc-ai-pin" id="sc-ai-pin" type="password" inputmode="numeric" maxlength="10" placeholder="PIN para IA" aria-label="PIN para generar con IA">
+          </div>
           <div class="field-group"><label for="sc-titular">Titular</label><input class="search" id="sc-titular" maxlength="120" value="${escapeHtml(seed.titular || '')}"></div>
           <div class="field-group"><label for="sc-caption">Texto de la publicación</label><textarea class="search" id="sc-caption" rows="4" maxlength="2200">${escapeHtml(seed.caption || '')}</textarea></div>
           <div class="field-group"><label for="sc-cta">Llamado a la acción</label><input class="search" id="sc-cta" maxlength="80" value="${escapeHtml(seed.cta || '')}"></div>
@@ -104,6 +109,42 @@
     activeOverlay = overlay;
     renderPreview();
 
+    async function runAi(kind, btn) {
+      const actorNombre = fieldVal('sc-creado-por');
+      const actorPin = fieldVal('sc-ai-pin');
+      if (!promo || !promo.id) { Orama.toast('Abre el compositor desde una promoción', 'error'); return; }
+      if (!actorNombre) { Orama.toast('Selecciona quién genera', 'error'); return; }
+      if (!actorPin) { Orama.toast('Ingresa tu PIN para usar IA', 'error'); return; }
+      const buttons = overlay.querySelectorAll('[data-ai]');
+      const original = btn.textContent;
+      buttons.forEach((b) => { b.disabled = true; });
+      btn.textContent = kind === 'image' ? 'Generando imagen…' : 'Generando texto…';
+      try {
+        const body = JSON.stringify({ promocion_id: promo.id, actor_nombre: actorNombre, actor_pin: actorPin });
+        if (kind === 'draft') {
+          const data = await api('/api/social-posts/ai/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+          document.getElementById('sc-titular').value = data.titular || '';
+          document.getElementById('sc-caption').value = data.caption || '';
+          document.getElementById('sc-cta').value = data.cta || '';
+          document.getElementById('sc-hashtags').value = data.hashtags || '';
+          Orama.toast('Texto generado — revísalo antes de guardar', 'success');
+        } else {
+          const data = await api('/api/social-posts/ai/image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+          document.getElementById('sc-imagen-url').value = data.url;
+          document.getElementById('sc-upload-status').textContent = 'Imagen generada con IA';
+        }
+        renderPreview();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      } finally {
+        buttons.forEach((b) => { b.disabled = false; });
+        btn.textContent = original;
+      }
+    }
+
+    overlay.querySelectorAll('[data-ai]').forEach((btn) => {
+      btn.addEventListener('click', () => runAi(btn.dataset.ai, btn));
+    });
     overlay.addEventListener('input', renderPreview);
     overlay.addEventListener('click', (event) => { if (event.target === overlay) close(); });
     overlay.querySelector('[data-ui="cancel"]').addEventListener('click', close);

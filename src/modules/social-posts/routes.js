@@ -3,8 +3,11 @@ const pool = require('../../config/database');
 const { validate } = require('../../middleware/validate');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { logBitacora, getStaffTipo } = require('../../shared/audit');
-const { createSocialPostSchema, updateSocialPostSchema, pinActionSchema, reviewActionSchema } = require('./schemas');
+const { createSocialPostSchema, updateSocialPostSchema, pinActionSchema, reviewActionSchema, aiDraftSchema, aiImageSchema } = require('./schemas');
 const { estadoTrasAprobacion, publishToProviders } = require('./service');
+const { generateCopy, AI_MODEL } = require('./ai');
+const { generateImage, FAL_MODEL } = require('./image-gen');
+const { assertUnderDailyLimit } = require('./ai-usage');
 
 const router = express.Router();
 
@@ -19,6 +22,39 @@ async function loadPost(id) {
   if (!rows.length) throw notFound();
   return rows[0];
 }
+
+async function loadPromo(id) {
+  const { rows } = await pool.query('SELECT * FROM promociones WHERE id = $1', [id]);
+  if (!rows.length) throw Object.assign(new Error('La promoción indicada no existe.'), { statusCode: 400 });
+  return rows[0];
+}
+
+// AI draft helpers — PIN-gated (any staff) and capped because each call costs
+// money. They only return suggested content; nothing is persisted here and the
+// approval workflow is untouched.
+router.post('/social-posts/ai/draft', validate(aiDraftSchema), async (req, res) => {
+  const staff = await verifyStaffPin(req.body.actor_nombre, req.body.actor_pin);
+  await assertUnderDailyLimit();
+  const promo = await loadPromo(req.body.promocion_id);
+  const copy = await generateCopy(promo);
+  await logBitacora({
+    entidadTipo: 'ai_generacion', entidadId: promo.id, accion: 'texto',
+    actorNombre: staff.nombre, actorTipo: staff.tipo, detalle: { model: AI_MODEL }
+  });
+  res.json({ success: true, ...copy });
+});
+
+router.post('/social-posts/ai/image', validate(aiImageSchema), async (req, res) => {
+  const staff = await verifyStaffPin(req.body.actor_nombre, req.body.actor_pin);
+  await assertUnderDailyLimit();
+  const promo = await loadPromo(req.body.promocion_id);
+  const result = await generateImage(promo, req.body.prompt);
+  await logBitacora({
+    entidadTipo: 'ai_generacion', entidadId: promo.id, accion: 'imagen',
+    actorNombre: staff.nombre, actorTipo: staff.tipo, detalle: { model: FAL_MODEL, prompt: result.prompt }
+  });
+  res.json({ success: true, url: result.url, width: result.width, height: result.height });
+});
 
 router.get('/social-posts', async (req, res) => {
   const { estado, promocion_id: promocionId } = req.query;

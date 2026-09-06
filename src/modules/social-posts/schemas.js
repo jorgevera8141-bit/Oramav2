@@ -25,9 +25,19 @@ const createSocialPostSchema = z.object(socialPostFields)
 
 const updateSocialPostSchema = z.object(socialPostFields).partial();
 
+const aiDraftSchema = pinActionSchema.extend({
+  promocion_id: z.number().int().positive()
+});
+
+const aiImageSchema = aiDraftSchema.extend({
+  prompt: z.string().max(500).optional()
+});
+
 module.exports = {
   createSocialPostSchema,
   updateSocialPostSchema,
   pinActionSchema,
-  reviewActionSchema
+  reviewActionSchema,
+  aiDraftSchema,
+  aiImageSchema
 };
