@@ -1,8 +1,8 @@
 const Anthropic = require('@anthropic-ai/sdk');
 
-// When NINEROUTER_URL is set, both AI calls route through a 9Router gateway
-// (OpenAI/Anthropic-compatible, one key, auto-fallback across providers).
-// Otherwise they hit the Anthropic API directly.
+// When NINEROUTER_URL is set, caption text comes from a 9Router gateway via its
+// OpenAI-compatible /v1/chat/completions (streamed — some connected models only
+// emit content when streamed). Otherwise the Anthropic API directly, via the SDK.
 const NINEROUTER_URL = (process.env.NINEROUTER_URL || '').replace(/\/$/, '');
 const VIA_9ROUTER = !!NINEROUTER_URL;
 
@@ -11,13 +11,11 @@ const AI_MODEL = VIA_9ROUTER
   : (process.env.ANTHROPIC_MODEL || 'claude-sonnet-5');
 const AI_BACKEND = VIA_9ROUTER ? '9router' : 'anthropic';
 
+const TIMEOUT_MS = 60_000;
+
 let client = null;
 function getClient() {
   if (client) return client;
-  if (VIA_9ROUTER) {
-    client = new Anthropic({ baseURL: NINEROUTER_URL, apiKey: process.env.NINEROUTER_KEY || 'no-auth' });
-    return client;
-  }
   if (!process.env.ANTHROPIC_API_KEY) {
     throw Object.assign(
       new Error('La generación de texto con IA no está configurada (define NINEROUTER_URL o ANTHROPIC_API_KEY).'),
@@ -28,11 +26,14 @@ function getClient() {
   return client;
 }
 
+const MAX_TOKENS = 2000;
+
 const SYSTEM = [
   'Eres la persona a cargo de redes sociales de Café Rosinal, una cafetería en México.',
   'Escribe en español de México: cálido, cercano, breve, sin exageraciones ni signos de exclamación de más.',
-  'Devuelve ÚNICAMENTE un objeto JSON válido (sin markdown, sin explicación) con exactamente estas claves:',
-  '"titular" (máx 80 caracteres), "caption" (2 a 4 frases), "cta" (llamado a la acción corto), "hashtags" (3 a 6 hashtags separados por espacio).'
+  'Devuelve ÚNICAMENTE un objeto JSON válido con exactamente estas claves:',
+  '"titular" (máx 80 caracteres), "caption" (2 a 4 frases), "cta" (llamado a la acción corto), "hashtags" (3 a 6 hashtags separados por espacio).',
+  'Tu respuesta debe empezar con { y terminar con }. No escribas nada antes ni después, ni bloques de markdown.'
 ].join(' ');
 
 function resumenPrecio(promo) {
@@ -56,47 +57,122 @@ function buildCopyPrompt(promo) {
   return `Redacta el texto de una publicación para Instagram y Facebook de esta promoción:\n\n${lines.join('\n')}`;
 }
 
-// Claude sometimes wraps JSON in ```json fences despite the instruction — strip them.
+// Models wrap the object in markdown fences or prose despite the instruction —
+// extract from the first "{" to the last "}" and parse that.
 function parseJsonLoose(text) {
-  const cleaned = String(text).trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim();
-  return JSON.parse(cleaned);
+  const s = String(text);
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start === -1 || end === -1 || end < start) throw new Error('no JSON object found');
+  return JSON.parse(s.slice(start, end + 1));
 }
 
 function wrapSdkError(err) {
-  const where = VIA_9ROUTER ? '9Router' : 'el servicio de IA';
   if (err instanceof Anthropic.APIConnectionError) {
-    return Object.assign(new Error(`No se pudo contactar a ${where}.`), { statusCode: 502 });
+    return Object.assign(new Error('No se pudo contactar al servicio de IA.'), { statusCode: 502 });
   }
   if (err instanceof Anthropic.AuthenticationError) {
-    return Object.assign(new Error('Credenciales de IA inválidas (revisa NINEROUTER_KEY / ANTHROPIC_API_KEY).'), { statusCode: 502 });
+    return Object.assign(new Error('Credenciales de IA inválidas (revisa ANTHROPIC_API_KEY).'), { statusCode: 502 });
   }
   if (err instanceof Anthropic.RateLimitError) {
-    return Object.assign(new Error(`${where} está saturado. Intenta en un momento.`), { statusCode: 503 });
+    return Object.assign(new Error('El servicio de IA está saturado. Intenta en un momento.'), { statusCode: 503 });
   }
   if (err instanceof Anthropic.APIError) {
     const status = err.status >= 400 && err.status < 600 ? err.status : 502;
-    return Object.assign(new Error(err.message || `${where} devolvió un error.`), { statusCode: status });
+    return Object.assign(new Error(err.message || 'El servicio de IA devolvió un error.'), { statusCode: status });
   }
   return err;
 }
 
-async function generateCopy(promo) {
-  const anthropic = getClient();
-  let message;
+// 9Router — OpenAI-compatible chat. Which of streamed / non-streamed actually
+// returns content varies by the connected provider (Gemini needs non-stream,
+// some free models need stream), so try non-stream first and fall back.
+async function nineRouterChatOnce(userContent, stream) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.NINEROUTER_KEY) headers.Authorization = `Bearer ${process.env.NINEROUTER_KEY}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let response;
   try {
-    message = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 800,
-      system: SYSTEM,
-      messages: [{ role: 'user', content: buildCopyPrompt(promo) }]
+    response = await fetch(`${NINEROUTER_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: AI_MODEL,
+        max_tokens: MAX_TOKENS,
+        stream,
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: userContent }
+        ]
+      })
     });
   } catch (err) {
-    throw wrapSdkError(err);
+    clearTimeout(timer);
+    if (err.name === 'AbortError') throw Object.assign(new Error('9Router tardó demasiado en responder.'), { statusCode: 504 });
+    throw Object.assign(new Error('No se pudo contactar a 9Router.'), { statusCode: 502 });
   }
-  const text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  if (!response.ok) {
+    clearTimeout(timer);
+    const json = await response.json().catch(() => ({}));
+    const msg = json.error?.message || json.message || `9Router respondió ${response.status}`;
+    throw Object.assign(new Error(response.status === 401 ? 'Credenciales de 9Router inválidas (revisa NINEROUTER_KEY).' : msg), { statusCode: 502 });
+  }
+
+  try {
+    if (!stream) {
+      const json = await response.json().catch(() => ({}));
+      return json.choices?.[0]?.message?.content || '';
+    }
+    let text = '';
+    let buffer = '';
+    const decoder = new TextDecoder();
+    for await (const chunk of response.body) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        const match = line.match(/^data:\s*(.+)$/);
+        if (!match || match[1] === '[DONE]') continue;
+        try {
+          text += JSON.parse(match[1]).choices?.[0]?.delta?.content || '';
+        } catch { /* keepalive / partial frame */ }
+      }
+    }
+    return text;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callNineRouterChat(userContent) {
+  const text = await nineRouterChatOnce(userContent, false);
+  if (text.trim()) return text;
+  return nineRouterChatOnce(userContent, true);
+}
+
+async function generateCopy(promo) {
+  const userContent = buildCopyPrompt(promo);
+  let text;
+  if (VIA_9ROUTER) {
+    text = await callNineRouterChat(userContent);
+  } else {
+    const anthropic = getClient();
+    let message;
+    try {
+      message = await anthropic.messages.create({
+        model: AI_MODEL,
+        max_tokens: MAX_TOKENS,
+        system: SYSTEM,
+        messages: [{ role: 'user', content: userContent }]
+      });
+    } catch (err) {
+      throw wrapSdkError(err);
+    }
+    text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  }
+
   let parsed;
   try {
     parsed = parseJsonLoose(text);

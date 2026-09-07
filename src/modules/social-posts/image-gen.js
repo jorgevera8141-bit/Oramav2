@@ -51,20 +51,22 @@ async function bufferFromUrl(url) {
 async function generateViaNineRouter(prompt) {
   const headers = { 'Content-Type': 'application/json' };
   if (process.env.NINEROUTER_KEY) headers.Authorization = `Bearer ${process.env.NINEROUTER_KEY}`;
-  const response = await fetchWithTimeout(`${NINEROUTER_URL}/v1/images/generations`, {
+  // Send only { model, prompt }; several providers (Cloudflare FLUX) 400 on
+  // size/width/height. Opt a size back in with NINEROUTER_IMAGE_SIZE.
+  const body = { model: NINEROUTER_IMAGE_MODEL, prompt };
+  if (process.env.NINEROUTER_IMAGE_SIZE) body.size = process.env.NINEROUTER_IMAGE_SIZE;
+  // ?response_format=binary makes the gateway stream raw image bytes back.
+  const response = await fetchWithTimeout(`${NINEROUTER_URL}/v1/images/generations?response_format=binary`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ model: NINEROUTER_IMAGE_MODEL, prompt, size: '1024x1024', response_format: 'b64_json' })
+    body: JSON.stringify(body)
   });
-  const json = await response.json().catch(() => ({}));
-  if (!response.ok) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok || contentType.includes('application/json')) {
+    const json = await response.json().catch(() => ({}));
     throw apiError(json.error?.message || json.message || `9Router respondió ${response.status}`, 502);
   }
-  const item = (json.data || [])[0];
-  if (!item) throw apiError('9Router no devolvió ninguna imagen.', 502);
-  if (item.b64_json) return Buffer.from(item.b64_json, 'base64');
-  if (item.url) return bufferFromUrl(item.url);
-  throw apiError('9Router devolvió una imagen en un formato inesperado.', 502);
+  return Buffer.from(await response.arrayBuffer());
 }
 
 async function generateViaFal(prompt) {
