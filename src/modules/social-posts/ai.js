@@ -29,11 +29,15 @@ function getClient() {
 const MAX_TOKENS = 2000;
 
 const SYSTEM = [
-  'Eres la persona a cargo de redes sociales de Café Rosinal, una cafetería en México.',
-  'Escribe en español de México: cálido, cercano, breve, sin exageraciones ni signos de exclamación de más.',
-  'Devuelve ÚNICAMENTE un objeto JSON válido con exactamente estas claves:',
-  '"titular" (máx 80 caracteres), "caption" (2 a 4 frases), "cta" (llamado a la acción corto), "hashtags" (3 a 6 hashtags separados por espacio).',
-  'Tu respuesta debe empezar con { y terminar con }. No escribas nada antes ni después, ni bloques de markdown.'
+  'Eres quien lleva las redes sociales de Café Rosinal, una cafetería en México. Escribes para Instagram y Facebook.',
+  'Voz: español de México, cálida y cercana, como la recomendación de alguien de confianza. Nada de lenguaje publicitario forzado, mayúsculas sostenidas, ni frases como "no te lo puedes perder".',
+  'Estructura del caption: (1) un gancho en la primera frase — una imagen concreta, una pregunta o el beneficio — porque es lo único que se ve antes de "ver más"; (2) una razón concreta para actuar: qué incluye, por qué vale la pena, hasta cuándo; (3) un cierre que invita a la acción.',
+  'titular: frase que detiene el scroll, basada en el beneficio, concreta y honesta, sin clickbait (máx 80 caracteres).',
+  'cta: una acción clara y de bajo esfuerzo, en imperativo (por ejemplo "Pídela hoy", "Te esperamos hasta el domingo").',
+  'hashtags: de 3 a 6, mezcla de 1 o 2 de marca (#CafeRosinal) y 2 o 3 de descubrimiento (categoría, ciudad, momento del día). Nada de etiquetas genéricas de relleno.',
+  'Reglas: máximo 1 o 2 emojis en total; caption de 2 a 4 frases (40 a 60 palabras); usa solo datos del brief, no inventes precios, productos ni fechas; respeta las condiciones y la vigencia cuando sean relevantes.',
+  'Devuelve ÚNICAMENTE un objeto JSON válido con exactamente estas claves: "titular", "caption", "cta", "hashtags" (los hashtags separados por espacio en un solo string).',
+  'Tu respuesta debe empezar con { y terminar con }. Nada antes ni después, ni bloques de markdown.'
 ].join(' ');
 
 function resumenPrecio(promo) {
@@ -156,32 +160,38 @@ async function callNineRouterChat(userContent) {
   return nineRouterChatOnce(userContent, true);
 }
 
+async function requestCopyText(userContent) {
+  if (VIA_9ROUTER) return callNineRouterChat(userContent);
+  const anthropic = getClient();
+  let message;
+  try {
+    message = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: MAX_TOKENS,
+      system: SYSTEM,
+      messages: [{ role: 'user', content: userContent }]
+    });
+  } catch (err) {
+    throw wrapSdkError(err);
+  }
+  return message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+}
+
 async function generateCopy(promo, contexto) {
   const userContent = buildCopyPrompt(promo, contexto);
-  let text;
-  if (VIA_9ROUTER) {
-    text = await callNineRouterChat(userContent);
-  } else {
-    const anthropic = getClient();
-    let message;
-    try {
-      message = await anthropic.messages.create({
-        model: AI_MODEL,
-        max_tokens: MAX_TOKENS,
-        system: SYSTEM,
-        messages: [{ role: 'user', content: userContent }]
-      });
-    } catch (err) {
-      throw wrapSdkError(err);
-    }
-    text = message.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  }
-
+  // Free gateway models occasionally return an empty or non-JSON body; one retry
+  // clears it. Real API errors are thrown inside requestCopyText and not retried.
   let parsed;
-  try {
-    parsed = parseJsonLoose(text);
-  } catch {
-    throw Object.assign(new Error('La IA devolvió una respuesta que no se pudo interpretar. Intenta de nuevo.'), { statusCode: 502 });
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const text = await requestCopyText(userContent);
+    try {
+      parsed = parseJsonLoose(text);
+      break;
+    } catch {
+      if (attempt === 2) {
+        throw Object.assign(new Error('La IA devolvió una respuesta que no se pudo interpretar. Intenta de nuevo.'), { statusCode: 502 });
+      }
+    }
   }
   return {
     titular: String(parsed.titular || '').slice(0, 120),
