@@ -9,7 +9,11 @@ function apiErrorMessage(data) {
   const base = data.message || 'No se pudo cargar la información';
   const d = data.details;
   if (!d) return base;
-  const parts = [].concat(d.formErrors || [], Object.values(d.fieldErrors || {}).flat()).filter(Boolean);
+  // Prefer the schema's own friendly refine messages; only fall back to raw
+  // field-level errors when there are none.
+  const form = (d.formErrors || []).filter(Boolean);
+  const fields = form.length ? [] : Object.values(d.fieldErrors || {}).flat().filter(Boolean);
+  const parts = form.concat(fields);
   return parts.length ? `${base}: ${parts.join(' · ')}` : base;
 }
 async function api(path, options) { const response = await fetch(path, options); const data = await response.json(); if (!response.ok || data.success === false) throw new Error(apiErrorMessage(data)); return data; }

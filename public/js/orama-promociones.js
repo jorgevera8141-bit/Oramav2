@@ -66,11 +66,11 @@ function promoFieldsMarkup(promo = {}, menuItems, staffList, prefix = 'promo') {
       <div class="field-group"><label for="${prefix}-producto-ids-bxy">Producto(s) que activan la promo</label>
         <select class="search" id="${prefix}-producto-ids-bxy" multiple size="5">${productOptions(promo.producto_ids)}</select>
       </div>
-      <div class="field-group"><label for="${prefix}-compra-cantidad">Compra cantidad</label><input class="search" id="${prefix}-compra-cantidad" type="number" min="1" step="1" value="${promo.compra_cantidad || ''}"></div>
+      <div class="field-group"><label for="${prefix}-compra-cantidad">Compra cantidad</label><input class="search" id="${prefix}-compra-cantidad" type="number" min="1" step="1" value="${promo.compra_cantidad || 1}"></div>
       <div class="field-group"><label for="${prefix}-lleva-producto">Producto que se obtiene</label>
         <select class="search" id="${prefix}-lleva-producto"><option value="">— Selecciona —</option>${menuItems.map((m) => `<option value="${m.id}" ${promo.lleva_producto_id === m.id ? 'selected' : ''}>${escapeHtml(m.nombre)}</option>`).join('')}</select>
       </div>
-      <div class="field-group"><label for="${prefix}-lleva-cantidad">Lleva cantidad</label><input class="search" id="${prefix}-lleva-cantidad" type="number" min="1" step="1" value="${promo.lleva_cantidad || ''}"></div>
+      <div class="field-group"><label for="${prefix}-lleva-cantidad">Lleva cantidad</label><input class="search" id="${prefix}-lleva-cantidad" type="number" min="1" step="1" value="${promo.lleva_cantidad || 1}"></div>
       <div class="field-group"><label for="${prefix}-lleva-pct">% de descuento en el producto obtenido (100 = gratis)</label><input class="search" id="${prefix}-lleva-pct" type="number" min="0" max="100" step="1" value="${promo.lleva_descuento_pct ?? 100}"></div>
     </div>
     <div class="field-group"><label for="${prefix}-fecha-inicio">Fecha de inicio</label><input class="search" id="${prefix}-fecha-inicio" type="date" value="${(promo.fecha_inicio || '').slice(0, 10)}" required></div>
