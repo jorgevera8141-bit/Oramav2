@@ -4,6 +4,7 @@ const { validate } = require('../../middleware/validate');
 const { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema, previewSchema } = require('./schemas');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { logBitacora, getStaffTipo } = require('../../shared/audit');
+const { notifyApprovalRequested } = require('../../shared/notify');
 const { hasWindowStarted, toDateString } = require('./engine');
 const { sweepPromotionLifecycle, getActivePromotions, priceItems } = require('./service');
 
@@ -123,6 +124,8 @@ router.post('/promotions/:id/submit', validate(pinActionSchema), async (req, res
     actorNombre: staffMember.nombre, actorTipo: staffMember.tipo,
     estadoAnterior: promo.estado, estadoNuevo: 'PENDING_APPROVAL'
   });
+  notifyApprovalRequested('promocion', updatedRows[0], staffMember.nombre)
+    .catch((error) => console.error('[notify]', error.message));
   res.json({ success: true, promocion: updatedRows[0] });
 });
 

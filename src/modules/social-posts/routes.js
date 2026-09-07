@@ -3,6 +3,7 @@ const pool = require('../../config/database');
 const { validate } = require('../../middleware/validate');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { logBitacora, getStaffTipo } = require('../../shared/audit');
+const { notifyApprovalRequested } = require('../../shared/notify');
 const { createSocialPostSchema, updateSocialPostSchema, pinActionSchema, reviewActionSchema, aiDraftSchema, aiImageSchema } = require('./schemas');
 const { estadoTrasAprobacion, publishToProviders } = require('./service');
 const { generateCopy, AI_MODEL, AI_BACKEND } = require('./ai');
@@ -148,6 +149,8 @@ router.post('/social-posts/:id/submit', validate(pinActionSchema), async (req, r
     actorNombre: staffMember.nombre, actorTipo: staffMember.tipo,
     estadoAnterior: post.estado, estadoNuevo: 'PENDING_APPROVAL'
   });
+  notifyApprovalRequested('publicacion_social', rows[0], staffMember.nombre)
+    .catch((error) => console.error('[notify]', error.message));
   res.json({ success: true, publicacion: rows[0] });
 });
 
