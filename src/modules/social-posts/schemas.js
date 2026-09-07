@@ -25,11 +25,15 @@ const createSocialPostSchema = z.object(socialPostFields)
 
 const updateSocialPostSchema = z.object(socialPostFields).partial();
 
-const aiDraftSchema = pinActionSchema.extend({
+const aiActionSchema = pinActionSchema.extend({
   promocion_id: z.number().int().positive()
 });
 
-const aiImageSchema = aiDraftSchema.extend({
+const aiDraftSchema = aiActionSchema.extend({
+  contexto: z.string().max(1000).optional()
+});
+
+const aiImageSchema = aiActionSchema.extend({
   prompt: z.string().max(500).optional()
 });
 

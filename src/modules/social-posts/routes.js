@@ -37,7 +37,7 @@ router.post('/social-posts/ai/draft', validate(aiDraftSchema), async (req, res) 
   const staff = await verifyStaffPin(req.body.actor_nombre, req.body.actor_pin);
   await assertUnderDailyLimit();
   const promo = await loadPromo(req.body.promocion_id);
-  const copy = await generateCopy(promo);
+  const copy = await generateCopy(promo, req.body.contexto);
   await logBitacora({
     entidadTipo: 'ai_generacion', entidadId: promo.id, accion: 'texto',
     actorNombre: staff.nombre, actorTipo: staff.tipo, detalle: { model: AI_MODEL, via: AI_BACKEND }

@@ -81,6 +81,9 @@
             <button type="button" class="button sc-ai-btn" data-ai="image">✨ Generar imagen</button>
             <input class="search sc-ai-pin" id="sc-ai-pin" type="password" inputmode="numeric" maxlength="10" placeholder="PIN para IA" aria-label="PIN para generar con IA">
           </div>
+          <div class="field-group"><label for="sc-ai-contexto">Contexto / referencia para la IA (opcional)</label>
+            <textarea class="search" id="sc-ai-contexto" rows="2" maxlength="1000" placeholder="Pega un post de referencia, hashtags habituales, el tono deseado o un ángulo de temporada…"></textarea>
+          </div>
           <div class="field-group"><label for="sc-titular">Titular</label><input class="search" id="sc-titular" maxlength="120" value="${escapeHtml(seed.titular || '')}"></div>
           <div class="field-group"><label for="sc-caption">Texto de la publicación</label><textarea class="search" id="sc-caption" rows="4" maxlength="2200">${escapeHtml(seed.caption || '')}</textarea></div>
           <div class="field-group"><label for="sc-cta">Llamado a la acción</label><input class="search" id="sc-cta" maxlength="80" value="${escapeHtml(seed.cta || '')}"></div>
@@ -120,16 +123,23 @@
       buttons.forEach((b) => { b.disabled = true; });
       btn.textContent = kind === 'image' ? 'Generando imagen…' : 'Generando texto…';
       try {
-        const body = JSON.stringify({ promocion_id: promo.id, actor_nombre: actorNombre, actor_pin: actorPin });
+        const base = { promocion_id: promo.id, actor_nombre: actorNombre, actor_pin: actorPin };
         if (kind === 'draft') {
-          const data = await api('/api/social-posts/ai/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+          const contexto = fieldVal('sc-ai-contexto');
+          const data = await api('/api/social-posts/ai/draft', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...base, contexto: contexto || undefined })
+          });
           document.getElementById('sc-titular').value = data.titular || '';
           document.getElementById('sc-caption').value = data.caption || '';
           document.getElementById('sc-cta').value = data.cta || '';
           document.getElementById('sc-hashtags').value = data.hashtags || '';
           Orama.toast('Texto generado — revísalo antes de guardar', 'success');
         } else {
-          const data = await api('/api/social-posts/ai/image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+          const data = await api('/api/social-posts/ai/image', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(base)
+          });
           document.getElementById('sc-imagen-url').value = data.url;
           document.getElementById('sc-upload-status').textContent = 'Imagen generada con IA';
         }

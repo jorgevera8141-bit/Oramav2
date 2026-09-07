@@ -28,6 +28,17 @@ test('buildCopyPrompt carries the promo name, benefit, and dates', () => {
   assert.match(prompt, /2026-09-30/);
 });
 
+test('buildCopyPrompt appends user reference material when contexto is given', () => {
+  const prompt = buildCopyPrompt(promo, 'Usar #RosinalDeTarde y un tono nostálgico');
+  assert.match(prompt, /#RosinalDeTarde/);
+  assert.match(prompt, /Material de referencia del usuario/);
+});
+
+test('buildCopyPrompt has no reference section without contexto', () => {
+  assert.doesNotMatch(buildCopyPrompt(promo), /Material de referencia/);
+  assert.doesNotMatch(buildCopyPrompt(promo, '   '), /Material de referencia/);
+});
+
 test('parseJsonLoose accepts bare JSON', () => {
   assert.deepEqual(parseJsonLoose('{"titular":"Hola"}'), { titular: 'Hola' });
 });
