@@ -1,17 +1,18 @@
-// Approval notifications over WhatsApp (Twilio). Dormant until the TWILIO_* env
-// vars are set; a send failure is logged and never blocks the submit request.
-// Approval itself still happens in the app with a PIN — this is only a nudge.
+// Approval notifications to a Telegram group. Dormant until TELEGRAM_BOT_TOKEN
+// and TELEGRAM_CHAT_ID are set; a send failure is logged and never blocks the
+// submit request. Approval itself still happens in the app with a PIN — this is
+// only a nudge.
 
-const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_FROM = process.env.TWILIO_WHATSAPP_FROM;            // whatsapp:+14155238886
-const TWILIO_TO = (process.env.TWILIO_WHATSAPP_TO || '')
-  .split(',').map((s) => s.trim()).filter(Boolean);              // whatsapp:+52..., whatsapp:+52...
-const TWILIO_CONTENT_SID = process.env.TWILIO_CONTENT_SID || null; // optional pre-approved template
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const CHAT_ID = process.env.TELEGRAM_CHAT_ID;                    // group id, e.g. -1001234567890
 const APP_URL = (process.env.APP_PUBLIC_URL || 'https://oramav2-production.up.railway.app').replace(/\/$/, '');
 const TIMEOUT_MS = 10_000;
 
-const NOTIFY_CONFIGURED = !!(TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM && TWILIO_TO.length);
+const NOTIFY_CONFIGURED = !!(BOT_TOKEN && CHAT_ID);
+
+function esc(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 function shortDate(value) {
   return String(value || '').slice(0, 10);
@@ -28,54 +29,49 @@ function beneficio(promo) {
 
 function promoMessage(promo, actorNombre) {
   return [
-    '🕐 *Promoción pendiente de aprobación*',
+    '🕐 <b>Promoción pendiente de aprobación</b>',
     '',
-    `*${promo.nombre}*`,
-    beneficio(promo),
-    promo.categoria ? `Categoría: ${promo.categoria}` : null,
+    `<b>${esc(promo.nombre)}</b>`,
+    esc(beneficio(promo)),
+    promo.categoria ? `Categoría: ${esc(promo.categoria)}` : null,
     `Vigencia: ${shortDate(promo.fecha_inicio)} → ${shortDate(promo.fecha_fin)}`,
-    `Enviada por ${actorNombre}`,
+    `Enviada por ${esc(actorNombre)}`,
     '',
-    `Revisar y aprobar: ${APP_URL}/#promociones`
+    `<a href="${APP_URL}/#promociones">Revisar y aprobar</a>`
   ].filter((line) => line !== null).join('\n');
 }
 
 function socialPostMessage(post, actorNombre) {
   return [
-    '🕐 *Publicación pendiente de aprobación*',
+    '🕐 <b>Publicación pendiente de aprobación</b>',
     '',
-    `*${post.titular || '(sin titular)'}*`,
-    (post.plataformas || []).join(', '),
-    post.caption ? post.caption.slice(0, 160) : null,
-    `Enviada por ${actorNombre}`,
+    `<b>${esc(post.titular || '(sin titular)')}</b>`,
+    esc((post.plataformas || []).join(', ')),
+    post.caption ? esc(post.caption.slice(0, 160)) : null,
+    `Enviada por ${esc(actorNombre)}`,
     '',
-    `Revisar y aprobar: ${APP_URL}/#promociones`
+    `<a href="${APP_URL}/#promociones">Revisar y aprobar</a>`
   ].filter((line) => line !== null).join('\n');
 }
 
-async function sendOne(to, body) {
-  const params = new URLSearchParams({ From: TWILIO_FROM, To: to });
-  if (TWILIO_CONTENT_SID) {
-    params.set('ContentSid', TWILIO_CONTENT_SID);
-    params.set('ContentVariables', JSON.stringify({ 1: body }));
-  } else {
-    params.set('Body', body);
-  }
+async function sendToTelegram(text) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`, {
+    const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${TWILIO_SID}:${TWILIO_TOKEN}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: params,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CHAT_ID,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true
+      }),
       signal: controller.signal
     });
     if (!response.ok) {
       const json = await response.json().catch(() => ({}));
-      throw new Error(`Twilio ${response.status} (${json.code || '?'}): ${json.message || 'error'}`);
+      throw new Error(`Telegram ${response.status}: ${json.description || 'error'}`);
     }
   } finally {
     clearTimeout(timer);
@@ -85,11 +81,11 @@ async function sendOne(to, body) {
 // Fire-and-forget from the submit routes: never awaited on the request path.
 async function notifyApprovalRequested(kind, entity, actorNombre) {
   if (!NOTIFY_CONFIGURED) return;
-  const body = kind === 'promocion' ? promoMessage(entity, actorNombre) : socialPostMessage(entity, actorNombre);
-  const results = await Promise.allSettled(TWILIO_TO.map((to) => sendOne(to, body)));
-  const failed = results.filter((r) => r.status === 'rejected');
-  if (failed.length) {
-    console.error(`[notify] ${failed.length}/${TWILIO_TO.length} WhatsApp approval notifications failed: ${failed.map((f) => f.reason.message).join('; ')}`);
+  const text = kind === 'promocion' ? promoMessage(entity, actorNombre) : socialPostMessage(entity, actorNombre);
+  try {
+    await sendToTelegram(text);
+  } catch (error) {
+    console.error(`[notify] Telegram approval notification failed: ${error.message}`);
   }
 }
 

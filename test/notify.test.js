@@ -11,7 +11,7 @@ const promo = {
   fecha_fin: '2026-12-31'
 };
 
-test('NOTIFY_CONFIGURED is false without TWILIO_* env vars', () => {
+test('NOTIFY_CONFIGURED is false without TELEGRAM_* env vars', () => {
   assert.equal(NOTIFY_CONFIGURED, false);
 });
 
