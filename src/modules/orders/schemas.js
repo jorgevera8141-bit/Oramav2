@@ -1,4 +1,5 @@
 const { z } = require('zod');
+const { phoneSchema } = require('../loyalty/schemas');
 
 const crearOrdenItemSchema = z.object({
   menu_item_id: z.number().int().positive(),
@@ -24,7 +25,13 @@ const cerrarSchema = z.object({
   amount_cash: z.number().nonnegative().optional(),
   amount_card: z.number().nonnegative().optional(),
   notas: z.string().max(500).optional(),
-  pagos: z.array(pagoSchema).min(1).optional()
+  pagos: z.array(pagoSchema).min(1).optional(),
+  loyalty_phone: phoneSchema.optional(),
+  // Required together when payment_method is 'cliente_frecuente': lets closeOrder
+  // redeem the reward and close the order in one transaction (see orders/service.js).
+  loyalty_customer_id: z.number().int().positive().optional(),
+  actor_nombre: z.string().min(1).optional(),
+  actor_pin: z.string().min(1).optional()
 });
 
 const cancelarSchema = z.object({

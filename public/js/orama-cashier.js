@@ -34,9 +34,40 @@ async function isFacturacionEnabled() {
 async function cashier() {
   let activasCache = [];
   let currentOverlay = null;
+  let staffList = [];
 
   function closeAnyModal() {
     if (currentOverlay) { currentOverlay.remove(); currentOverlay = null; }
+  }
+
+  function openPinModal({ title }) {
+    return new Promise((resolve) => {
+      closeAnyModal();
+      const overlay = document.createElement('div');
+      overlay.className = 'orama-overlay';
+      overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
+        <p class="orama-modal-message">${escapeHtml(title)}</p>
+        <div class="field-group"><label for="pin-actor-nombre">Tu nombre</label>
+          <select class="search" id="pin-actor-nombre">${staffList.map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
+        </div>
+        <div class="field-group"><label for="pin-actor-pin">Tu PIN</label><input class="search" id="pin-actor-pin" type="password" inputmode="numeric" maxlength="10"></div>
+        <div class="orama-modal-actions">
+          <button type="button" class="button" data-ui="cancel">Cancelar</button>
+          <button type="button" class="button" data-ui="confirm">Confirmar</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+      currentOverlay = overlay;
+      const close = (value) => { overlay.remove(); if (currentOverlay === overlay) currentOverlay = null; resolve(value); };
+      overlay.addEventListener('click', (event) => { if (event.target === overlay) close(null); });
+      overlay.querySelector('[data-ui="cancel"]').addEventListener('click', () => close(null));
+      overlay.querySelector('[data-ui="confirm"]').addEventListener('click', () => {
+        const actor_nombre = document.getElementById('pin-actor-nombre').value;
+        const actor_pin = document.getElementById('pin-actor-pin').value;
+        if (!actor_pin) { Orama.toast('Ingresa tu PIN', 'error'); return; }
+        close({ actor_nombre, actor_pin });
+      });
+    });
   }
 
   async function loadActivas() {
@@ -267,10 +298,12 @@ async function cashier() {
     renderPrompt();
   }
 
-  async function confirmPayment(order, method) {
+  async function confirmPayment(order, method, getLoyalty = () => null) {
     let amount_cash = 0;
     let amount_card = 0;
     let notas = '';
+    let redeemAuth = null;
+    const loyalty = getLoyalty();
 
     if (method === 'efectivo') {
       const received = Number(document.getElementById('pay-efectivo')?.value || 0);
@@ -284,18 +317,36 @@ async function cashier() {
       if (ef + ta < Number(order.total)) { Orama.toast('La suma no cubre el total', 'warning'); return; }
       amount_cash = ef;
       amount_card = ta;
+    } else if (method === 'cliente_frecuente') {
+      if (!loyalty || !loyalty.card.reward_available) {
+        Orama.toast('Busca al cliente y confirma que tiene una bebida gratis disponible', 'warning');
+        return;
+      }
+      // Redemption itself now happens server-side as part of the /cerrar call below
+      // (same transaction as closing the order), so a failure there can't leave
+      // stamps consumed with no order closed. We only collect the PIN auth here.
+      redeemAuth = await openPinModal({ title: 'Confirmar canje de bebida gratis' });
+      if (!redeemAuth) return;
     } else {
       notas = document.getElementById('pay-nota')?.value || '';
     }
 
+    // openPinModal (above, for cliente_frecuente) already closed the payment modal's
+    // overlay, so this button may no longer be in the DOM — guard every use of it.
     const confirmButton = document.querySelector('[data-pay-confirm]');
-    confirmButton.disabled = true;
-    confirmButton.textContent = 'Procesando…';
+    if (confirmButton) { confirmButton.disabled = true; confirmButton.textContent = 'Procesando…'; }
     try {
+      const body = { payment_method: method, amount_cash, amount_card, notas };
+      if (loyalty && method !== 'cliente_frecuente') body.loyalty_phone = loyalty.customer.phone;
+      if (method === 'cliente_frecuente') {
+        body.loyalty_customer_id = loyalty.customer.id;
+        body.actor_nombre = redeemAuth.actor_nombre;
+        body.actor_pin = redeemAuth.actor_pin;
+      }
       await api(`/api/ordenes/${order.id}/cerrar`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_method: method, amount_cash, amount_card, notas })
+        body: JSON.stringify(body)
       });
       closeAnyModal();
       Orama.toast(`Cobro registrado — ${money.format(order.total)}`, 'success');
@@ -305,19 +356,38 @@ async function cashier() {
       if (canFacturar) openFacturaFlow(order, method);
     } catch (error) {
       Orama.toast(error.message, 'error');
-      confirmButton.disabled = false;
-      confirmButton.textContent = 'Confirmar cobro';
+      if (confirmButton) { confirmButton.disabled = false; confirmButton.textContent = 'Confirmar cobro'; }
     }
+  }
+
+  function loyaltyRedeemFieldsMarkup(loyalty) {
+    if (!loyalty) {
+      return `<div class="pay-highlight"><p class="pay-highlight-label">Cliente Frecuente</p><p class="pay-highlight-value" style="font-size:14px">Busca al cliente arriba para canjear su bebida gratis</p></div>`;
+    }
+    if (!loyalty.card.reward_available) {
+      return `<div class="pay-highlight"><p class="pay-highlight-label">Cliente Frecuente</p><p class="pay-highlight-value" style="font-size:14px">${loyalty.card.balance}/${loyalty.card.stamps_required} sellos — aún no tiene bebida gratis</p></div>`;
+    }
+    return `<div class="pay-highlight"><p class="pay-highlight-label">🎉 Bebida gratis disponible</p><p class="pay-highlight-value" style="font-size:15px">Equivalente a su producto más frecuente</p></div>
+      <p class="subtle" style="margin-top:8px">Al confirmar se te pedirá tu nombre y PIN para registrar el canje.</p>`;
   }
 
   function renderPaymentModal(order) {
     closeAnyModal();
     let method = 'efectivo';
+    let loyalty = null;
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
     overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
         <p class="subtle" style="margin:0 0 4px">${escapeHtml(order.mesa_nombre || 'Mostrador')}</p>
         <p class="orama-modal-message" style="font:700 28px 'JetBrains Mono',monospace;color:var(--cream)">${money.format(order.total)}</p>
+        <div class="field-group">
+          <label for="pay-loyalty-phone">Cliente frecuente (opcional)</label>
+          <div style="display:flex;gap:8px">
+            <input class="search" id="pay-loyalty-phone" inputmode="numeric" maxlength="10" placeholder="Teléfono a 10 dígitos">
+            <button type="button" class="button" data-loyalty-lookup style="width:auto;padding:0 16px;flex:none">Buscar</button>
+          </div>
+          <p class="subtle" id="pay-loyalty-status" style="margin-top:6px;min-height:16px"></p>
+        </div>
         <div class="filters" id="pay-methods" style="margin-bottom:16px">${PAYMENT_METHODS.map((m, i) => `<button type="button" class="pill ${i === 0 ? 'active' : ''}" data-method="${m.id}">${m.label}</button>`).join('')}</div>
         <div id="pay-fields">${paymentFieldsMarkup(method, order.total)}</div>
         <div class="orama-modal-actions">
@@ -329,17 +399,59 @@ async function cashier() {
     currentOverlay = overlay;
     wireFieldEvents(order.total);
 
+    function renderFields() {
+      document.getElementById('pay-fields').innerHTML = method === 'cliente_frecuente'
+        ? loyaltyRedeemFieldsMarkup(loyalty)
+        : paymentFieldsMarkup(method, order.total);
+      wireFieldEvents(order.total);
+    }
+
+    function renderLoyaltyStatus() {
+      const el = document.getElementById('pay-loyalty-status');
+      if (!el) return;
+      el.textContent = !loyalty ? '' : loyalty.card.reward_available
+        ? `🎉 ${loyalty.customer.nombre || loyalty.customer.phone} tiene una bebida gratis disponible`
+        : `${loyalty.card.balance}/${loyalty.card.stamps_required} sellos`;
+    }
+
+    async function lookupLoyalty() {
+      const input = document.getElementById('pay-loyalty-phone');
+      const phone = (input?.value || '').replace(/\D/g, '');
+      if (phone.length !== 10) { Orama.toast('Ingresa un teléfono a 10 dígitos', 'warning'); return; }
+      const button = document.querySelector('[data-loyalty-lookup]');
+      if (button) { button.disabled = true; button.textContent = 'Buscando…'; }
+      try {
+        let data;
+        try {
+          data = await api(`/api/loyalty/customers/${phone}`);
+        } catch (error) {
+          // Only a genuine "not found" (404) means we should create the customer.
+          // Any other failure (network error, 500, etc.) must surface as-is —
+          // otherwise it gets masked as a successful new-customer lookup.
+          if (error.status !== 404) throw error;
+          data = await api('/api/loyalty/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+        }
+        loyalty = { customer: data.customer, card: data.card };
+        renderLoyaltyStatus();
+        if (method === 'cliente_frecuente') renderFields();
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      } finally {
+        if (button) { button.disabled = false; button.textContent = 'Buscar'; }
+      }
+    }
+
     overlay.addEventListener('click', (event) => {
+      if (event.target.closest('[data-loyalty-lookup]')) { lookupLoyalty(); return; }
       const methodButton = event.target.closest('[data-method]');
       if (methodButton) {
         method = methodButton.dataset.method;
         overlay.querySelectorAll('#pay-methods .pill').forEach((pill) => pill.classList.toggle('active', pill.dataset.method === method));
-        document.getElementById('pay-fields').innerHTML = paymentFieldsMarkup(method, order.total);
-        wireFieldEvents(order.total);
+        renderFields();
         return;
       }
       if (event.target.closest('[data-pay-cancel]') || event.target === overlay) { closeAnyModal(); return; }
-      if (event.target.closest('[data-pay-confirm]')) confirmPayment(order, method);
+      if (event.target.closest('[data-pay-confirm]')) confirmPayment(order, method, () => loyalty);
     });
   }
 
@@ -552,6 +664,7 @@ async function cashier() {
 
   app.addEventListener('click', onAppClick);
   await loadActivas();
+  try { staffList = (await api('/api/staff/active')).staff || []; } catch { staffList = []; }
 
   return () => {
     app.removeEventListener('click', onAppClick);

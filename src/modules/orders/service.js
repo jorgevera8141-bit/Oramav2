@@ -1,5 +1,7 @@
 const pool = require('../../config/database');
 const { notify } = require('../../shared/ntfy');
+const { verifyStaffPin } = require('../../shared/pin-auth');
+const { findOrCreateCustomer, awardStamp, redeemRewardWithClient } = require('../loyalty/service');
 
 async function deductInventoryForOrder(client, orderId) {
   const { rows: items } = await client.query('SELECT item_nombre, cantidad FROM orden_items WHERE orden_id = $1', [orderId]);
@@ -31,11 +33,26 @@ async function closeOrder(orderId, payload = {}) {
     if (!order) throw Object.assign(new Error('Orden no encontrada'), { statusCode: 404 });
     if (order.status === 'cerrada') { await client.query('COMMIT'); return order; }
     if (order.status === 'cancelada') throw Object.assign(new Error('La orden está cancelada'), { statusCode: 409 });
+
+    // Redeem the loyalty reward inside this same transaction (not via a separate
+    // request) so a failure closing the order also rolls back the redemption —
+    // the customer never loses stamps for an order that didn't actually close.
+    let redencion = null;
+    if (payload.payment_method === 'cliente_frecuente' && payload.loyalty_customer_id) {
+      await verifyStaffPin(payload.actor_nombre, payload.actor_pin);
+      redencion = await redeemRewardWithClient(payload.loyalty_customer_id, orderId, payload.actor_nombre, client);
+    }
+
     await deductInventoryForOrder(client, orderId);
 
     let paymentMethod = payload.payment_method;
     let amountCash = payload.amount_cash;
     let amountCard = payload.amount_card;
+    let notas = payload.notas;
+    if (redencion) {
+      const redencionNota = `Canje cliente frecuente: ${redencion.producto_otorgado || 'producto'}`;
+      notas = notas ? `${notas} — ${redencionNota}` : redencionNota;
+    }
 
     if (payload.pagos && payload.pagos.length) {
       for (const pago of payload.pagos) {
@@ -50,11 +67,18 @@ async function closeOrder(orderId, payload = {}) {
       amountCard = totals.amount_card;
     }
 
-    const result = await client.query("UPDATE ordenes SET status = 'cerrada', closed_at = NOW(), payment_method = COALESCE($2, payment_method), amount_cash = COALESCE($3, amount_cash), amount_card = COALESCE($4, amount_card), notas = COALESCE($5, notas) WHERE id = $1 RETURNING *", [orderId, paymentMethod, amountCash, amountCard, payload.notas]);
+    const result = await client.query("UPDATE ordenes SET status = 'cerrada', closed_at = NOW(), payment_method = COALESCE($2, payment_method), amount_cash = COALESCE($3, amount_cash), amount_card = COALESCE($4, amount_card), notas = COALESCE($5, notas) WHERE id = $1 RETURNING *", [orderId, paymentMethod, amountCash, amountCard, notas]);
     if (order.mesa_id) await client.query("UPDATE mesas SET status = 'disponible' WHERE id = $1", [order.mesa_id]);
+
+    const closedOrder = result.rows[0];
+    if (payload.loyalty_phone && closedOrder.payment_method !== 'cliente_frecuente' && Number(closedOrder.total) > 0) {
+      const customer = await findOrCreateCustomer(payload.loyalty_phone, client);
+      await awardStamp(customer.id, orderId, client);
+    }
+
     await client.query('COMMIT');
     await notify(process.env.NTFY_ORDER_TOPIC || 'orama-orders', `Orden ${orderId} cerrada`, 'Orden cerrada');
-    return result.rows[0];
+    return { ...closedOrder, loyalty_redencion: redencion };
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
