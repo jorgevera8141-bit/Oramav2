@@ -1,25 +1,53 @@
-.loyalty-body{display:flex;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;padding:24px}
-.loyalty-shell{width:min(420px,100%)}
-.loyalty-card{padding:0;overflow:hidden;background:rgba(26,22,20,.85)}
-.loyalty-card-head{padding:28px 24px 22px;text-align:center;background:linear-gradient(160deg,var(--teal),#1f7a6f)}
-.loyalty-card-head .logo{width:150px;margin:0 auto 10px;color:#08211d}
+/* Orama Loyalty — "Cliente Frecuente" card.
+   Visual layering (ambient glow, tilt, sheen, gradient border, staggered
+   stamps) is built from the shared .fx-* utilities in orama-pro.css so this
+   page reads as part of the same design system as the POS dashboard rather
+   than a one-off. Only domain-specific bits (stamp grid, progress bar,
+   reward badge) stay here. Tilt/sheen wiring + [data-fx] handling lives in
+   orama-fx.js; reduced-motion is handled globally in orama-pro.css. */
+
+.loyalty-body{position:relative;display:flex;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;padding:24px;overflow:hidden}
+.loyalty-shell{position:relative;z-index:1;width:min(420px,100%)}
+.loyalty-card{position:relative;padding:0;overflow:hidden;border-radius:18px;box-shadow:0 2px 6px rgba(0,0,0,.35),0 18px 40px rgba(0,0,0,.4),0 40px 80px -20px rgba(42,157,143,.18);animation:fx-rise .7s var(--ease) both}
+.loyalty-card-head{position:relative;padding:30px 24px 24px;text-align:center;background:linear-gradient(160deg,var(--teal),#1f7a6f);overflow:hidden;border-radius:17px 17px 0 0}
+.loyalty-card-head::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 0%,rgba(255,255,255,.25),transparent 55%);pointer-events:none}
+.loyalty-card-head .logo{position:relative;width:150px;margin:0 auto 10px;color:#08211d;animation:fx-rise .6s .1s var(--ease) both}
 .loyalty-card-head .logo .logo-word,.loyalty-card-head .logo .logo-cafe{fill:#08211d}
 .loyalty-card-head .logo .logo-steam,.loyalty-card-head .logo .logo-cup,.loyalty-card-head .logo .logo-arc,.loyalty-card-head .logo .logo-bean-line,.loyalty-card-head .logo .logo-dash{stroke:#08211d}
 .loyalty-card-head .logo .logo-bean{fill:#08211d;stroke:#eafaf6}
-.loyalty-eyebrow{margin:0;color:rgba(8,33,29,.75);font:600 12px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase}
-.loyalty-card-body{padding:26px 24px 30px}
+.loyalty-eyebrow{position:relative;margin:0;color:rgba(8,33,29,.75);font:600 12px 'JetBrains Mono',monospace;letter-spacing:.14em;text-transform:uppercase;animation:fx-rise .5s .2s var(--ease) both}
+.loyalty-card-body{position:relative;padding:26px 24px 30px}
+
+/* ---- Rubber-stamp badge: thumps down over the card body when unlocked ---- */
+.stamp-badge{position:absolute;top:-6px;right:2px;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;width:80px;height:80px;border:3px double var(--terracotta);border-radius:50%;color:var(--terracotta);background:rgba(15,13,11,.4);transform:rotate(-16deg) scale(0);font:700 11px 'JetBrains Mono',monospace;letter-spacing:.05em;text-transform:uppercase;text-align:center;line-height:1.3;animation:loyalty-stamp-thump .55s .1s cubic-bezier(.36,1.6,.4,1) both}
+.stamp-badge span{display:block}
+@keyframes loyalty-stamp-thump{0%{opacity:0;transform:rotate(-16deg) scale(2.2)}60%{opacity:1;transform:rotate(-20deg) scale(.85)}80%{transform:rotate(-14deg) scale(1.05)}100%{opacity:1;transform:rotate(-16deg) scale(1)}}
+
 .loyalty-form label{display:block;margin-bottom:8px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
-.loyalty-form .search{width:100%;font-size:18px;letter-spacing:.04em;text-align:center}
+.loyalty-form .search{width:100%;font-size:18px;letter-spacing:.04em;text-align:center;transition:box-shadow .25s var(--ease),border-color .25s var(--ease)}
+.loyalty-form .search:focus{border-color:var(--teal);box-shadow:0 0 0 4px var(--teal-soft)}
 .loyalty-form .button{width:100%;margin-top:14px}
-.loyalty-error{margin-top:12px}
-.stamp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0 18px}
-.stamp-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:2px dashed rgba(42,157,143,.4);border-radius:10px;color:var(--muted);font-size:13px}
-.stamp-cell.filled{border-style:solid;border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
+.loyalty-error{margin-top:12px;animation:fx-rise .3s var(--ease) both}
+
+/* ---- Stamp grid: punch card, each new stamp "stamps in" with a stagger ---- */
+.stamp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0 14px}
+.stamp-cell{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:2px dashed rgba(42,157,143,.4);border-radius:10px;color:var(--muted);font-size:13px}
+.stamp-cell.filled{border-style:solid;border-color:var(--teal);background:var(--teal-soft);color:var(--teal);animation:loyalty-stamp-in .5s var(--ease) both;animation-delay:calc(var(--i,0) * 70ms)}
 .stamp-cell.filled::before{content:'☕';font-size:22px}
+@keyframes loyalty-stamp-in{0%{opacity:0;transform:scale(1.6) rotate(-14deg)}55%{opacity:1;transform:scale(.9) rotate(5deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
 .stamp-cell.reward{grid-column:span 3;aspect-ratio:auto;flex-direction:column;gap:2px;padding:14px;border-color:var(--amber);color:var(--amber);font:700 13px 'DM Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase}
-.stamp-cell.reward.available{border-style:solid;background:rgba(212,168,75,.16);animation:loyalty-glow 1.8s ease-in-out infinite}
+.stamp-cell.reward.available{border-style:solid;background:rgba(212,168,75,.16);--fx-glow-color:rgba(212,168,75,.18)}
 .stamp-cell.reward small{color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none}
-@keyframes loyalty-glow{50%{box-shadow:0 0 0 4px rgba(212,168,75,.18)}}
+.stamp-cell.reward.available .spark{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--amber);opacity:0;animation:loyalty-spark-pop 1.6s ease-in-out infinite}
+.stamp-cell.reward.available .spark:nth-child(1){top:6px;left:14%;animation-delay:0s}
+.stamp-cell.reward.available .spark:nth-child(2){top:10px;right:18%;animation-delay:.4s}
+.stamp-cell.reward.available .spark:nth-child(3){bottom:8px;left:40%;animation-delay:.8s}
+@keyframes loyalty-spark-pop{0%{opacity:0;transform:translateY(4px) scale(.5)}30%{opacity:1;transform:translateY(-2px) scale(1)}100%{opacity:0;transform:translateY(-10px) scale(.6)}}
+
+/* ---- Progress bar toward the next reward ---- */
+.loyalty-progress-track{height:6px;margin:4px 0 16px;background:rgba(255,255,255,.06);border-radius:6px;overflow:hidden}
+.loyalty-progress-fill{height:100%;width:100%;transform:scaleX(0);transform-origin:left;background:linear-gradient(90deg,var(--teal),var(--amber));border-radius:6px;transition:transform .7s var(--ease)}
+
 .loyalty-progress-label{margin:0 0 4px;text-align:center;color:var(--cream);font-size:14px}
 .loyalty-progress-label strong{color:var(--teal);font-family:'JetBrains Mono',monospace}
 .loyalty-customer-name{margin:0 0 2px;text-align:center;color:var(--cream);font:600 20px 'Playfair Display',Georgia,serif}

@@ -31,6 +31,7 @@ if (typeof window !== 'undefined') {
       app.innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
     } finally {
       app.setAttribute('aria-busy', 'false');
+      if (window.OramaFx) OramaFx.init(app);
     }
   };
   window.addEventListener('hashchange', window.render);

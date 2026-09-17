@@ -68,3 +68,37 @@
 .sc-ai-btn{border-color:var(--teal);color:var(--teal);font-size:13px}
 .sc-ai-btn:hover:not(:disabled){background:var(--teal);color:#081513}
 .sc-ai-pin{flex:1;min-width:110px;max-width:150px;min-height:44px}
+
+/* ---- Motion & FX utilities ----
+   Shared, parameter-driven effects (styled via CSS custom properties, not
+   one-off classes per page) so the POS dashboard and the standalone loyalty
+   page read as one design system. Wiring for [data-fx] elements and the
+   .fx-rise stagger lives in orama-fx.js; reduced-motion is already handled
+   globally by the @media rule above, which zeroes every animation/transition
+   duration on this page. */
+main{position:relative;z-index:1}
+
+.fx-orb-field{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.fx-orb{position:absolute;border-radius:50%;filter:blur(var(--fx-orb-blur,60px));mix-blend-mode:screen;opacity:var(--fx-orb-opacity,.4);background:radial-gradient(circle,var(--fx-orb-color,var(--teal)) 0%,transparent 70%);animation:fx-orb-drift var(--fx-orb-duration,24s) ease-in-out infinite alternate}
+@keyframes fx-orb-drift{from{transform:translate(0,0) scale(1)}to{transform:translate(var(--fx-orb-x,6vmax),var(--fx-orb-y,4vmax)) scale(1.1)}}
+
+.fx-tilt-shell{perspective:1400px}
+.fx-tilt{transition:transform .18s var(--ease);transform-style:preserve-3d}
+
+.fx-sheen{position:relative;overflow:hidden}
+.fx-sheen::after{content:'';position:absolute;top:-50%;left:-30%;width:35%;height:200%;background:linear-gradient(75deg,transparent,rgba(255,255,255,.18),transparent);transform:translateX(-120%) rotate(8deg);pointer-events:none;opacity:0}
+.fx-sheen.is-sheening::after{animation:fx-sheen-sweep 1s ease-out}
+@keyframes fx-sheen-sweep{0%{opacity:0;transform:translateX(-120%) rotate(8deg)}12%{opacity:1}100%{opacity:0;transform:translateX(340%) rotate(8deg)}}
+
+.fx-border-glow{position:relative;border:1px solid transparent;background-image:linear-gradient(165deg,var(--fx-border-bg-a,rgba(37,32,25,.94)),var(--fx-border-bg-b,rgba(20,17,14,.96))),linear-gradient(155deg,var(--fx-border-a,rgba(212,168,75,.6)),var(--fx-border-b,rgba(42,157,143,.4)) 45%,var(--fx-border-c,rgba(212,168,75,0)) 75%);background-origin:border-box;background-clip:padding-box,border-box}
+
+.button{position:relative;overflow:hidden;isolation:isolate}
+.button::before,.fx-magnetic::before{content:'';position:absolute;inset:0;z-index:-1;background:radial-gradient(120px circle at var(--mx,50%) var(--my,50%),var(--fx-magnetic-color,rgba(42,157,143,.35)),transparent 70%);opacity:0;transition:opacity .3s var(--ease)}
+.button:hover::before,.fx-magnetic:hover::before{opacity:1}
+.fx-magnetic{position:relative;overflow:hidden;isolation:isolate}
+
+.fx-rise{animation:fx-rise .6s var(--ease) both;animation-delay:calc(var(--i,0) * 60ms)}
+@keyframes fx-rise{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+.fx-pulse{animation:fx-pulse 1.8s ease-in-out infinite}
+@keyframes fx-pulse{50%{box-shadow:0 0 0 6px var(--fx-glow-color,rgba(212,168,75,.16))}}
