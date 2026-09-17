@@ -14,6 +14,7 @@ const gastosRoutes = require('./modules/gastos/routes');
 const promotionsRoutes = require('./modules/promotions/routes');
 const socialPostsRoutes = require('./modules/social-posts/routes');
 const uploadsRoutes = require('./modules/uploads/routes');
+const loyaltyRoutes = require('./modules/loyalty/routes');
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use('/api', gastosRoutes);
 app.use('/api', promotionsRoutes);
 app.use('/api', socialPostsRoutes);
 app.use('/api', uploadsRoutes);
+app.use('/api', loyaltyRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
@@ -222,6 +224,37 @@ async function initDb() {
     detalle JSONB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS loyalty_customers (
+    id SERIAL PRIMARY KEY,
+    phone TEXT NOT NULL UNIQUE,
+    nombre TEXT,
+    marketing_consent BOOLEAN NOT NULL DEFAULT false,
+    consent_at TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended','deleted')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS loyalty_redenciones (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES loyalty_customers(id) ON DELETE CASCADE,
+    orden_id INTEGER REFERENCES ordenes(id),
+    tipo TEXT NOT NULL CHECK (tipo IN ('recompensa','ajuste_manual')),
+    stamps_consumidos INTEGER NOT NULL,
+    producto_otorgado TEXT,
+    razon TEXT,
+    actor_nombre TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS loyalty_stamps (
+    id SERIAL PRIMARY KEY,
+    customer_id INTEGER NOT NULL REFERENCES loyalty_customers(id) ON DELETE CASCADE,
+    orden_id INTEGER REFERENCES ordenes(id),
+    consumed_by_redencion_id INTEGER REFERENCES loyalty_redenciones(id),
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(orden_id)
+  )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_loyalty_stamps_customer ON loyalty_stamps(customer_id, consumed_by_redencion_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_loyalty_redenciones_customer ON loyalty_redenciones(customer_id)');
   await pool.query('ALTER TABLE orden_items ADD COLUMN IF NOT EXISTS promocion_id INTEGER REFERENCES promociones(id)');
   await pool.query('ALTER TABLE orden_items ADD COLUMN IF NOT EXISTS menu_item_id INTEGER REFERENCES menu_items(id)');
   await pool.query('ALTER TABLE orden_items ADD COLUMN IF NOT EXISTS descuento_unitario NUMERIC DEFAULT 0');
