@@ -54,3 +54,8 @@
 .loyalty-customer-phone{margin:0 0 18px;text-align:center;color:var(--muted);font:12px 'JetBrains Mono',monospace}
 .loyalty-switch{display:block;margin:16px auto 0;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer}
 .loyalty-footer{margin-top:14px;text-align:center;color:var(--muted);font-size:11px}
+
+@media (prefers-reduced-motion: reduce){
+  .stamp-cell.filled,.stamp-cell.reward.available .spark,.stamp-badge{animation:none!important}
+  .loyalty-progress-fill{transition:none!important}
+}
