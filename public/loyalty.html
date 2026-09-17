@@ -12,7 +12,12 @@
   <link rel="stylesheet" href="/css/orama-loyalty.css">
 </head>
 <body class="loyalty-body">
-  <main id="loyalty-app" class="loyalty-shell" aria-live="polite"></main>
+  <div class="fx-orb-field" aria-hidden="true">
+    <span class="fx-orb" style="--fx-orb-color:var(--teal);top:-12%;left:-10%;width:46vmax;height:46vmax;--fx-orb-opacity:.5;--fx-orb-duration:22s;--fx-orb-x:6vmax;--fx-orb-y:4vmax"></span>
+    <span class="fx-orb" style="--fx-orb-color:var(--amber);right:-16%;bottom:-18%;width:38vmax;height:38vmax;--fx-orb-opacity:.32;--fx-orb-duration:26s;--fx-orb-x:-5vmax;--fx-orb-y:-3vmax"></span>
+  </div>
+  <main id="loyalty-app" class="loyalty-shell fx-tilt-shell" aria-live="polite"></main>
+  <script src="/js/orama-fx.js" defer></script>
   <script src="/js/orama-loyalty.js" defer></script>
 </body>
 </html>

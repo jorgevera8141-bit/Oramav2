@@ -14,11 +14,29 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
+// Re-wires the shared .fx-* effects (tilt, sheen, staggered entrance) on
+// top of whatever renderShell just put in the DOM, since the whole card is
+// replaced via innerHTML on every render. Also animates the progress-bar
+// fill in from 0, which OramaFx doesn't know about.
+function enhanceCard() {
+  const card = app.querySelector('.loyalty-card');
+  if (!card) return;
+  OramaFx.init(app);
+
+  const fill = card.querySelector('.loyalty-progress-fill');
+  if (!fill) return;
+  const target = fill.dataset.progress || '0';
+  // Double rAF: lets the initial scaleX(0) actually paint before we set the
+  // real target, so the transition has a starting point to animate from.
+  requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.transform = `scaleX(${target})`; }));
+}
+
 function renderShell(inner) {
-  app.innerHTML = `<section class="glass-card loyalty-card">
+  app.innerHTML = `<section class="glass-card loyalty-card fx-border-glow fx-tilt fx-sheen" data-fx="tilt sheen">
     <div class="loyalty-card-head">${LOGO_SVG}<p class="loyalty-eyebrow">Cliente Frecuente</p></div>
     <div class="loyalty-card-body">${inner}</div>
   </section>`;
+  enhanceCard();
 }
 
 function renderPhoneForm(message = '') {
@@ -53,21 +71,28 @@ function renderSignupForm(phone) {
 function stampGridHtml(card) {
   const cells = [];
   for (let i = 0; i < card.stamps_required; i += 1) {
-    cells.push(`<div class="stamp-cell${i < card.balance ? ' filled' : ''}"></div>`);
+    const filled = i < card.balance;
+    cells.push(`<div class="stamp-cell${filled ? ' filled' : ''}"${filled ? ` style="--i:${i}"` : ''}></div>`);
   }
-  cells.push(`<div class="stamp-cell reward${card.reward_available ? ' available' : ''}">
+  const sparks = card.reward_available ? '<span class="spark" aria-hidden="true"></span><span class="spark" aria-hidden="true"></span><span class="spark" aria-hidden="true"></span>' : '';
+  cells.push(`<div class="stamp-cell reward${card.reward_available ? ' available fx-pulse' : ''}">
     ${card.reward_available ? '¡Bebida gratis lista!' : 'Bebida gratis'}
     <small>Equivalente a tu producto favorito</small>
+    ${sparks}
   </div>`);
   return `<div class="stamp-grid">${cells.join('')}</div>`;
 }
 
 function renderCard(customer, card) {
   const remaining = Math.max(card.stamps_required - card.balance, 0);
+  const progress = Math.min(card.balance / card.stamps_required, 1);
+  const badge = card.reward_available ? '<div class="stamp-badge" aria-hidden="true"><span>¡Bebida</span><span>gratis!</span></div>' : '';
   renderShell(`
+    ${badge}
     <p class="loyalty-customer-name">${escapeHtml(customer.nombre || 'Cliente frecuente')}</p>
     <p class="loyalty-customer-phone">${escapeHtml(customer.phone)}</p>
     ${stampGridHtml(card)}
+    <div class="loyalty-progress-track"><div class="loyalty-progress-fill" data-progress="${progress}"></div></div>
     <p class="loyalty-progress-label">
       ${card.reward_available
         ? '<strong>¡Ya tienes una bebida gratis!</strong> Muéstrale esta pantalla al staff.'
