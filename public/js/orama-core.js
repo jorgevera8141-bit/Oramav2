@@ -40,3 +40,22 @@ function icon(name) {
   const filled = ICON_FILLED.has(name);
   return `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="${filled ? 'currentColor' : 'none'}" stroke="${filled ? 'none' : 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
 }
+
+(function initNavMore() {
+  const toggle = document.querySelector('[data-nav-more-toggle]');
+  const menu = document.querySelector('[data-nav-more-menu]');
+  if (!toggle || !menu) return;
+  const close = () => { toggle.setAttribute('aria-expanded', 'false'); menu.hidden = true; };
+  const open = () => {
+    const rect = toggle.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.right = `${window.innerWidth - rect.right}px`;
+    toggle.setAttribute('aria-expanded', 'true');
+    menu.hidden = false;
+  };
+  toggle.addEventListener('click', (event) => { event.stopPropagation(); if (menu.hidden) open(); else close(); });
+  menu.addEventListener('click', (event) => { if (event.target.closest('a')) close(); });
+  document.addEventListener('click', (event) => { if (!menu.hidden && !menu.contains(event.target) && event.target !== toggle) close(); });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !menu.hidden) { close(); toggle.focus(); } });
+  window.addEventListener('hashchange', close);
+})();
