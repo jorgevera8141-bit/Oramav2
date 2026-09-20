@@ -30,7 +30,7 @@ async function nuevaOrden() {
         <span class="cart-summary-total">${money.format(total)}</span>
         <span class="cart-summary-toggle">${state.cartOpen ? 'Ocultar ▾' : 'Ver ▴'}</span>
       </div>
-      <div class="cart-items ${state.cartOpen ? 'open' : ''}">${state.cart.length ? state.cart.map((line) => `<div class="cart-item-row"><span class="cart-item-name">${escapeHtml(line.item_nombre)}</span><span class="cart-item-qty">x${line.cantidad}</span><span class="cart-item-price">${money.format(line.precio * line.cantidad)}</span><button type="button" class="button danger" data-remove-id="${line.id}" aria-label="Quitar ${escapeHtml(line.item_nombre)}">−</button></div>`).join('') : '<p class="subtle">Carrito vacío</p>'}${promoRows}</div>
+      <div class="cart-items ${state.cartOpen ? 'open' : ''}"><div class="cart-items-inner">${state.cart.length ? state.cart.map((line) => `<div class="cart-item-row"><span class="cart-item-name">${escapeHtml(line.item_nombre)}</span><span class="cart-item-qty">x${line.cantidad}</span><span class="cart-item-price">${money.format(line.precio * line.cantidad)}</span><button type="button" class="button danger" data-remove-id="${line.id}" aria-label="Quitar ${escapeHtml(line.item_nombre)}">−</button></div>`).join('') : '<p class="subtle">Carrito vacío</p>'}${promoRows}</div></div>
       <div class="cart-actions">
         <button type="button" class="button" data-change-mesa>Cambiar mesa</button>
         <button type="button" class="button" data-submit-order ${state.cart.length ? '' : 'disabled'}>Ordenar</button>

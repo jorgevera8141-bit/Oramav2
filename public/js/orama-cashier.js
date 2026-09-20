@@ -149,7 +149,7 @@ async function cashier() {
         const ta = Number(mixtoTarjeta.value || 0);
         const remaining = Number(total) - ef - ta;
         const el = document.getElementById('pay-mixto-restante');
-        el.textContent = remaining > 0 ? `${money.format(remaining)} pendiente` : remaining < 0 ? `${money.format(Math.abs(remaining))} cambio` : '✔ exacto';
+        el.textContent = remaining > 0 ? `${money.format(remaining)} pendiente` : remaining < 0 ? `${money.format(Math.abs(remaining))} cambio` : 'Exacto';
         el.classList.toggle('negative', remaining > 0);
       };
       mixtoEfectivo.addEventListener('input', recalc);
@@ -216,7 +216,7 @@ async function cashier() {
     function setBody(html) { body.innerHTML = html; }
 
     function renderPrompt() {
-      setBody(`<p class="orama-modal-message">🧾 ¿Facturar esta venta?</p>
+      setBody(`<p class="orama-modal-message">${icon('receipt')}¿Facturar esta venta?</p>
         <p class="subtle" style="margin-bottom:18px">Total: ${money.format(order.total)}</p>
         <div class="orama-modal-actions"><button type="button" class="button" data-factura-skip>Omitir</button><button type="button" class="button" data-factura-start>Facturar</button></div>`);
     }
@@ -227,7 +227,7 @@ async function cashier() {
       const tarjetaField = method === 'tarjeta' ? `<div class="field-group"><label>¿Débito o crédito?</label><div class="filters"><button type="button" class="pill ${formaPagoTarjeta === '28' ? 'active' : ''}" data-forma-pago="28">Débito</button><button type="button" class="pill ${formaPagoTarjeta === '04' ? 'active' : ''}" data-forma-pago="04">Crédito</button></div></div>` : '';
       setBody(`<p class="orama-modal-message">Datos de facturación</p>
         <p class="subtle" style="margin-bottom:14px">Total: ${money.format(order.total)}</p>
-        <button type="button" class="button" style="width:100%;margin-bottom:14px" data-factura-global>⚡ Factura Global (sin datos)</button>
+        <button type="button" class="button" style="width:100%;margin-bottom:14px" data-factura-global>${icon('bolt')}Factura Global (sin datos)</button>
         <div class="field-group"><label for="factura-rfc">RFC</label><input class="search" id="factura-rfc" maxlength="13" style="text-transform:uppercase" placeholder="XAXX010101000"></div>
         <div class="field-group"><label for="factura-razon">Razón Social / Nombre</label><input class="search" id="factura-razon" placeholder="Nombre completo o razón social"></div>
         <div class="field-group"><label for="factura-regimen">Régimen Fiscal</label><select class="search" id="factura-regimen"><option value="">Selecciona…</option>${regimenOpts}</select></div>
@@ -240,9 +240,9 @@ async function cashier() {
     }
 
     function renderSuccess(factura) {
-      setBody(`<p class="orama-modal-message">✅ Factura timbrada</p>
+      setBody(`<p class="orama-modal-message">${icon('check-badge')}Factura timbrada</p>
         <div class="pay-highlight"><p class="pay-highlight-label">FOLIO FISCAL (UUID)</p><p class="pay-highlight-value" style="font-size:13px;word-break:break-all">${escapeHtml(factura.folio_fiscal || '—')}</p></div>
-        <div class="action-row" style="margin-bottom:12px"><button type="button" class="button" data-factura-email>📧 Correo</button><button type="button" class="button" data-factura-whatsapp>📱 WhatsApp</button></div>
+        <div class="action-row" style="margin-bottom:12px"><button type="button" class="button" data-factura-email>${icon('mail')}Correo</button><button type="button" class="button" data-factura-whatsapp>${icon('message')}WhatsApp</button></div>
         <a href="/api/factura/${factura.id}/pdf" target="_blank" class="subtle" style="display:block;text-align:center;margin-bottom:12px">Ver PDF</a>
         <div class="orama-modal-actions"><button type="button" class="button" data-factura-cancel>Cerrar</button></div>`);
     }
@@ -367,7 +367,7 @@ async function cashier() {
     if (!loyalty.card.reward_available) {
       return `<div class="pay-highlight"><p class="pay-highlight-label">Cliente Frecuente</p><p class="pay-highlight-value" style="font-size:14px">${loyalty.card.balance}/${loyalty.card.stamps_required} sellos — aún no tiene bebida gratis</p></div>`;
     }
-    return `<div class="pay-highlight"><p class="pay-highlight-label">🎉 Bebida gratis disponible</p><p class="pay-highlight-value" style="font-size:15px">Equivalente a su producto más frecuente</p></div>
+    return `<div class="pay-highlight"><p class="pay-highlight-label">${icon('gift')}Bebida gratis disponible</p><p class="pay-highlight-value" style="font-size:15px">Equivalente a su producto más frecuente</p></div>
       <p class="subtle" style="margin-top:8px">Al confirmar se te pedirá tu nombre y PIN para registrar el canje.</p>`;
   }
 
@@ -410,7 +410,7 @@ async function cashier() {
       const el = document.getElementById('pay-loyalty-status');
       if (!el) return;
       el.textContent = !loyalty ? '' : loyalty.card.reward_available
-        ? `🎉 ${loyalty.customer.nombre || loyalty.customer.phone} tiene una bebida gratis disponible`
+        ? `${loyalty.customer.nombre || loyalty.customer.phone} tiene una bebida gratis disponible`
         : `${loyalty.card.balance}/${loyalty.card.stamps_required} sellos`;
     }
 
@@ -484,7 +484,7 @@ async function cashier() {
         const subtotal = personItems.reduce((sum, item) => sum + item.precio, 0);
         return `<div class="order-card" style="margin-bottom:10px">
           <div class="order-card-head"><h2 class="order-card-mesa" style="font-size:16px">${escapeHtml(person.name)}</h2><span class="mono">${money.format(subtotal)}</span></div>
-          <p class="subtle" style="margin:0 0 10px">${person.paid ? '✅ Pagado' : 'Pendiente'}</p>
+          <p class="subtle" style="margin:0 0 10px">${person.paid ? `${icon('check')}Pagado` : 'Pendiente'}</p>
           ${personItems.length ? `<ul class="order-card-items">${personItems.map((item) => `<li style="justify-content:space-between"><span>${escapeHtml(item.nombre)}</span><span class="mono">${money.format(item.precio)}</span>${!person.paid ? `<button type="button" class="button danger" style="min-height:32px;width:auto;padding:2px 10px" data-unassign="${item.id}">×</button>` : ''}</li>`).join('')}</ul>` : '<p class="subtle">Sin artículos</p>'}
           ${!person.paid && subtotal > 0 ? `<button type="button" class="button" data-pay-person="${person.id}">Cobrar ${money.format(subtotal)}</button>` : ''}
         </div>`;
@@ -495,7 +495,7 @@ async function cashier() {
         : (persons.length ? '<p class="subtle">Todos los artículos asignados</p>' : '<p class="subtle">Agrega personas para asignar artículos</p>');
 
       body.innerHTML = `
-        <p class="orama-modal-message">✂️ Dividir cuenta</p>
+        <p class="orama-modal-message">${icon('scissors')}Dividir cuenta</p>
         <p class="subtle" style="margin-bottom:14px">Total orden: ${money.format(order.total)}</p>
         <div class="field-group">
           <label for="split-equal-n">División igualitaria</label>

@@ -1,6 +1,8 @@
 const CHART_JS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js';
 const DOW_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const PAYMENT_CHART_COLORS = { efectivo: '#2A9D8F', tarjeta: '#D4A84B' };
+function themeVar(name, fallback) { const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return value || fallback; }
+const CHART_THEME = { teal: themeVar('--teal', '#2A9D8F'), amber: themeVar('--amber', '#D4A84B'), muted: themeVar('--muted', '#A89F91'), cream: themeVar('--cream', '#E8E0D4') };
+const PAYMENT_CHART_COLORS = { efectivo: CHART_THEME.teal, tarjeta: CHART_THEME.amber };
 
 function loadChartJs() {
   if (window.Chart) return Promise.resolve();
@@ -138,16 +140,16 @@ async function reportes() {
       const serieLabels = serie.map((row) => new Date(`${row.d}`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }));
       charts.serie = new Chart(document.getElementById('chart-serie'), {
         type: 'bar',
-        data: { labels: serieLabels, datasets: [{ label: 'Ingresos', data: serie.map((row) => Number(row.ingresos)), backgroundColor: '#2A9D8F' }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#E8E0D4' } }, x: { ticks: { color: '#E8E0D4' } } } }
+        data: { labels: serieLabels, datasets: [{ label: 'Ingresos', data: serie.map((row) => Number(row.ingresos)), backgroundColor: CHART_THEME.teal }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: CHART_THEME.cream } }, x: { ticks: { color: CHART_THEME.cream } } } }
       });
       charts.pagos = new Chart(document.getElementById('chart-pagos'), {
         type: 'doughnut',
         data: {
           labels: pagos.map((row) => (row.payment_method === 'efectivo' ? 'Efectivo' : 'Tarjeta')),
-          datasets: [{ data: pagos.map((row) => Number(row.total)), backgroundColor: pagos.map((row) => PAYMENT_CHART_COLORS[row.payment_method] || '#A89F91') }]
+          datasets: [{ data: pagos.map((row) => Number(row.total)), backgroundColor: pagos.map((row) => PAYMENT_CHART_COLORS[row.payment_method] || CHART_THEME.muted) }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#E8E0D4' } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: CHART_THEME.cream } } } }
       });
     }).catch((error) => Orama.toast(error.message, 'error'));
   }

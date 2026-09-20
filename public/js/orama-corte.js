@@ -33,7 +33,7 @@ async function corte() {
           <div class="panel-head"><h2>Órdenes cerradas</h2><span class="subtle">${ordenes}</span></div>
           ${orderTable(data.ordenes_lista || [])}
         </section>
-        <button type="button" class="button" style="width:100%;margin-top:16px" data-share-corte>📤 Compartir corte</button>`;
+        <button type="button" class="button" style="width:100%;margin-top:16px" data-share-corte>${icon('share')}Compartir corte</button>`;
 
       container.dataset.shareText = [
         'ORAMA CAFÉ — Corte de Caja',
