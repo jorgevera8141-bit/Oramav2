@@ -2,7 +2,7 @@
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const canHoverPrecisely = window.matchMedia('(pointer: fine)').matches;
 
-  const AUTO_RISE_SELECTOR = '.glass-card, .panel, .mesa-card, .order-card';
+  const AUTO_RISE_SELECTOR = '.glass-card, .mesa-card, .order-card, .menu-item-card, .orama-modal, .orama-toast';
 
   /**
    * Wires a pointer-follow 3D tilt onto `el` (pairs with the .fx-tilt CSS
