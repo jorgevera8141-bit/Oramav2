@@ -218,7 +218,7 @@ tbody tr:hover{background:rgba(42,157,143,.12)}
   .main-nav a,.nav-more-toggle{padding:8px 10px}
   .menu-items-grid{grid-template-columns:1fr}
   .ops-alert-strip{align-items:flex-start;flex-direction:column}
-  .table-wrap table[data-responsive-cards="true"]{min-width:520px}
+  .table-wrap table[data-responsive-cards="true"]{min-width:0}
   .table-wrap table[data-responsive-cards="true"] th,
   .table-wrap table[data-responsive-cards="true"] td{padding:10px 8px}
   .table-wrap table[data-responsive-cards="true"] .action-row{gap:6px}
