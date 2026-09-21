@@ -18,7 +18,20 @@ function apiErrorMessage(data) {
 }
 async function api(path, options) { const response = await fetch(path, options); const data = await response.json(); if (!response.ok || data.success === false) { const error = new Error(apiErrorMessage(data)); error.status = response.status; throw error; } return data; }
 function pageHead(eyebrow, title, subtitle = '', photo = '') { const head = `<div class="page-head"><div><p class="eyebrow">${escapeHtml(eyebrow)}</p><h1>${escapeHtml(title)}</h1>${subtitle ? `<p class="subtle">${escapeHtml(subtitle)}</p>` : ''}</div></div>`; return photo ? `<div class="hero-banner" style="background-image:url('${photo}')">${head}</div>` : head; }
-function statusBadge(status) { const map = { disponible: 'available', ocupada: 'occupied', cerrada: 'closed', cancelada: 'cancelled' }; return `<span class="badge ${map[status] || ''}">${escapeHtml(status)}</span>`; }
+function statusBadge(status) {
+  const normalized = String(status || '').toLowerCase();
+  const map = {
+    disponible: 'available',
+    abierta: 'available',
+    ocupada: 'occupied',
+    por_cobrar: 'occupied',
+    cerrada: 'closed',
+    cancelada: 'cancelled',
+    pendiente: 'occupied',
+    error: 'cancelled'
+  };
+  return `<span class="badge ${map[normalized] || ''}">${escapeHtml(status)}</span>`;
+}
 function setActive(route) { document.querySelectorAll('[data-route]').forEach((link) => { if (link.dataset.route === route) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }); }
 
 const ICON_PATHS = {
