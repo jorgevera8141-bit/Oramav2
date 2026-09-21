@@ -52,8 +52,8 @@ test('validateClosePayment accepts a split payment whose total matches within th
     amount_cash: 33.33,
     amount_card: 66.67,
     pagos: [
-      { payment_method: 'efectivo', amount_cash: 33.33, amount_card: 0, persona_nombre: null },
-      { payment_method: 'tarjeta', amount_cash: 0, amount_card: 66.67, persona_nombre: null }
+      { payment_method: 'efectivo', amount_cash: 33.33, amount_card: 0, persona_nombre: null, loyalty_customer_id: null, actor_nombre: null, actor_pin: null },
+      { payment_method: 'tarjeta', amount_cash: 0, amount_card: 66.67, persona_nombre: null, loyalty_customer_id: null, actor_nombre: null, actor_pin: null }
     ]
   });
 });
@@ -70,8 +70,20 @@ test('validateClosePayment rejects split payments that do not match the order to
   );
 });
 
-test('validateClosePayment makes zero-due loyalty redemption explicit', () => {
-  const payment = validateClosePayment(87.5, {
+test('validateClosePayment rejects zero-due methods inside split payments', () => {
+  assert.throws(
+    () => validateClosePayment(100, {
+      pagos: [
+        { payment_method: 'cortesia' },
+        { payment_method: 'tarjeta', amount_card: 100 }
+      ]
+    }),
+    (error) => error.statusCode === 400 && error.message === 'cortesia no es válido dentro de pagos divididos.'
+  );
+});
+
+test('validateClosePayment makes zero-due loyalty redemption explicit when the order total is zero', () => {
+  const payment = validateClosePayment(0, {
     payment_method: 'cliente_frecuente',
     loyalty_customer_id: 4,
     actor_nombre: 'Caja',
@@ -81,13 +93,28 @@ test('validateClosePayment makes zero-due loyalty redemption explicit', () => {
     payment_method: 'cliente_frecuente',
     amount_cash: 0,
     amount_card: 0,
-    persona_nombre: null
+    persona_nombre: null,
+    loyalty_customer_id: 4,
+    actor_nombre: 'Caja',
+    actor_pin: '1234'
   });
+});
+
+test('validateClosePayment rejects zero-due methods when the order still has a balance', () => {
+  assert.throws(
+    () => validateClosePayment(87.5, {
+      payment_method: 'cliente_frecuente',
+      loyalty_customer_id: 4,
+      actor_nombre: 'Caja',
+      actor_pin: '1234'
+    }),
+    (error) => error.statusCode === 400 && error.message === 'Este método de pago solo es válido cuando el monto a cobrar es cero.'
+  );
 });
 
 test('validateClosePayment requires staff/customer data for cliente_frecuente', () => {
   assert.throws(
-    () => validateClosePayment(87.5, { payment_method: 'cliente_frecuente' }),
+    () => validateClosePayment(0, { payment_method: 'cliente_frecuente' }),
     (error) => error.statusCode === 400 && error.message === 'Cliente frecuente requiere cliente, nombre y PIN del staff para cerrar la orden.'
   );
 });

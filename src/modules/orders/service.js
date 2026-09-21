@@ -66,18 +66,24 @@ function normalizePaymentEntry(payment, { split = false } = {}) {
   if (ZERO_DUE_PAYMENT_METHODS.has(paymentMethod) && totalPaid > PAYMENT_ROUNDING_TOLERANCE) {
     badPayment(`Los pagos con método ${paymentMethod} no deben registrar monto cobrado.`);
   }
-  if (split && paymentMethod === 'cliente_frecuente') {
-    badPayment('Cliente frecuente no es válido dentro de pagos divididos.');
+  if (split && ZERO_DUE_PAYMENT_METHODS.has(paymentMethod)) {
+    badPayment(`${paymentMethod} no es válido dentro de pagos divididos.`);
   }
-  if (!split && paymentMethod === 'cliente_frecuente' && (!payment.loyalty_customer_id || !payment.actor_nombre || !payment.actor_pin)) {
-    badPayment('Cliente frecuente requiere cliente, nombre y PIN del staff para cerrar la orden.');
+  if (!split && paymentMethod === 'cliente_frecuente') {
+    const loyaltyCustomerId = Number(payment.loyalty_customer_id);
+    if (!Number.isInteger(loyaltyCustomerId) || loyaltyCustomerId <= 0 || !payment.actor_nombre || !payment.actor_pin) {
+      badPayment('Cliente frecuente requiere cliente, nombre y PIN del staff para cerrar la orden.');
+    }
   }
 
   return {
     payment_method: paymentMethod,
     amount_cash: amountCash,
     amount_card: amountCard,
-    persona_nombre: payment?.persona_nombre || null
+    persona_nombre: payment?.persona_nombre || null,
+    loyalty_customer_id: paymentMethod === 'cliente_frecuente' ? Number(payment.loyalty_customer_id) : null,
+    actor_nombre: paymentMethod === 'cliente_frecuente' ? payment.actor_nombre : null,
+    actor_pin: paymentMethod === 'cliente_frecuente' ? payment.actor_pin : null
   };
 }
 
@@ -101,6 +107,10 @@ function validateClosePayment(orderTotal, payload = {}) {
   }
 
   const payment = normalizePaymentEntry(payload);
+  if (ZERO_DUE_PAYMENT_METHODS.has(payment.payment_method) && total > PAYMENT_ROUNDING_TOLERANCE) {
+    badPayment('Este método de pago solo es válido cuando el monto a cobrar es cero.');
+  }
+
   const expectedPaid = ZERO_DUE_PAYMENT_METHODS.has(payment.payment_method) ? 0 : total;
   const actualPaid = payment.amount_cash + payment.amount_card;
   if (!isCurrencyMatch(expectedPaid, actualPaid)) {
@@ -127,9 +137,9 @@ async function closeOrder(orderId, payload = {}) {
     // request) so a failure closing the order also rolls back the redemption —
     // the customer never loses stamps for an order that didn't actually close.
     let redencion = null;
-    if (payment.payment_method === 'cliente_frecuente' && payload.loyalty_customer_id) {
-      await verifyStaffPin(payload.actor_nombre, payload.actor_pin);
-      redencion = await redeemRewardWithClient(payload.loyalty_customer_id, orderId, payload.actor_nombre, client);
+    if (payment.payment_method === 'cliente_frecuente' && payment.loyalty_customer_id) {
+      await verifyStaffPin(payment.actor_nombre, payment.actor_pin);
+      redencion = await redeemRewardWithClient(payment.loyalty_customer_id, orderId, payment.actor_nombre, client);
     }
 
     await deductInventoryForOrder(client, orderId);

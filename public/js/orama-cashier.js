@@ -5,7 +5,7 @@ const PAYMENT_METHODS = [
   { id: 'cortesia', label: 'Cortesía' },
   { id: 'cliente_frecuente', label: 'Frecuente' }
 ];
-const SPLIT_PAYMENT_METHODS = PAYMENT_METHODS.filter((method) => method.id !== 'cliente_frecuente');
+const SPLIT_PAYMENT_METHODS = PAYMENT_METHODS.filter((method) => !['cortesia', 'cliente_frecuente'].includes(method.id));
 const PAYMENT_LABELS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', mixto: 'Mixto', cortesia: 'Cortesía', cliente_frecuente: 'Cliente Frecuente' };
 const PAYMENT_ROUNDING_TOLERANCE = 0.01;
 const REGIMENES_FISCALES = [
@@ -318,7 +318,7 @@ async function cashier() {
       const ta = Number(document.getElementById('pay-mixto-tarjeta')?.value || 0);
       const diff = Math.abs((ef + ta) - Number(order.total));
       if (ef <= 0 || ta <= 0) { Orama.toast('El pago mixto debe incluir efectivo y tarjeta', 'warning'); return; }
-      if (diff > PAYMENT_ROUNDING_TOLERANCE) { Orama.toast('La suma debe coincidir exactamente con el total', 'warning'); return; }
+      if (diff > PAYMENT_ROUNDING_TOLERANCE) { Orama.toast('La suma debe coincidir con el total (tolerancia de redondeo: $0.01)', 'warning'); return; }
       amount_cash = ef;
       amount_card = ta;
     } else if (method === 'cliente_frecuente') {
@@ -550,7 +550,7 @@ async function cashier() {
         const ta = Number(document.getElementById('pay-mixto-tarjeta')?.value || 0);
         const diff = Math.abs((ef + ta) - subtotal);
         if (ef <= 0 || ta <= 0) { Orama.toast('El pago mixto debe incluir efectivo y tarjeta', 'warning'); return; }
-        if (diff > PAYMENT_ROUNDING_TOLERANCE) { Orama.toast('La suma debe coincidir exactamente con el subtotal', 'warning'); return; }
+        if (diff > PAYMENT_ROUNDING_TOLERANCE) { Orama.toast('La suma debe coincidir con el subtotal (tolerancia de redondeo: $0.01)', 'warning'); return; }
         amount_cash = ef;
         amount_card = ta;
       }
