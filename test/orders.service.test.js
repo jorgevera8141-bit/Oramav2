@@ -70,6 +70,13 @@ test('validateClosePayment rejects split payments that do not match the order to
   );
 });
 
+test('validateClosePayment rejects an explicitly empty split-payment list', () => {
+  assert.throws(
+    () => validateClosePayment(100, { payment_method: 'dividido', pagos: [] }),
+    (error) => error.statusCode === 400 && error.message === 'Debes registrar al menos un pago dividido.'
+  );
+});
+
 test('validateClosePayment rejects zero-due methods inside split payments', () => {
   assert.throws(
     () => validateClosePayment(100, {

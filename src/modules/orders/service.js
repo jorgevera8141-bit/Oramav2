@@ -89,7 +89,10 @@ function normalizePaymentEntry(payment, { split = false } = {}) {
 
 function validateClosePayment(orderTotal, payload = {}) {
   const total = Number(orderTotal || 0);
-  if (payload.pagos?.length) {
+  if (Array.isArray(payload.pagos)) {
+    if (!payload.pagos.length) {
+      badPayment('Debes registrar al menos un pago dividido.');
+    }
     if (payload.payment_method && payload.payment_method !== 'dividido') {
       badPayment('No combines un payment_method individual con una lista de pagos divididos.');
     }
