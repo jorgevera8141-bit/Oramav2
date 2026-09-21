@@ -13,4 +13,23 @@ const createInventoryItemSchema = z.object({
 
 const updateInventoryItemSchema = createInventoryItemSchema.partial();
 
-module.exports = { createInventoryItemSchema, updateInventoryItemSchema };
+const inventoryIdParamSchema = z.object({
+  id: z.coerce.number().int().positive()
+});
+
+const restockInventoryItemSchema = z.object({
+  amount: z.preprocess((value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? Number(trimmed) : Number.NaN;
+    }
+    return value;
+  }, z.number().refine(Number.isFinite, 'La cantidad debe ser un número finito.').positive('La cantidad debe ser mayor que cero.'))
+});
+
+module.exports = {
+  createInventoryItemSchema,
+  inventoryIdParamSchema,
+  restockInventoryItemSchema,
+  updateInventoryItemSchema
+};

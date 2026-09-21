@@ -5,7 +5,9 @@ const PAYMENT_METHODS = [
   { id: 'cortesia', label: 'Cortesía' },
   { id: 'cliente_frecuente', label: 'Frecuente' }
 ];
+const SPLIT_PAYMENT_METHODS = PAYMENT_METHODS.filter((method) => !['cortesia', 'cliente_frecuente'].includes(method.id));
 const PAYMENT_LABELS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', mixto: 'Mixto', cortesia: 'Cortesía', cliente_frecuente: 'Cliente Frecuente' };
+const PAYMENT_ROUNDING_TOLERANCE = 0.01;
 const REGIMENES_FISCALES = [
   ['601', 'General de Ley Personas Morales'],
   ['603', 'Personas Morales con Fines no Lucrativos'],
@@ -314,7 +316,9 @@ async function cashier() {
     } else if (method === 'mixto') {
       const ef = Number(document.getElementById('pay-mixto-efectivo')?.value || 0);
       const ta = Number(document.getElementById('pay-mixto-tarjeta')?.value || 0);
-      if (ef + ta < Number(order.total)) { Orama.toast('La suma no cubre el total', 'warning'); return; }
+      const diff = Math.abs((ef + ta) - Number(order.total));
+      if (ef <= 0 || ta <= 0) { Orama.toast('El pago mixto debe incluir efectivo y tarjeta', 'warning'); return; }
+      if (diff > PAYMENT_ROUNDING_TOLERANCE) { Orama.toast('La suma debe coincidir con el total (tolerancia de redondeo: $0.01)', 'warning'); return; }
       amount_cash = ef;
       amount_card = ta;
     } else if (method === 'cliente_frecuente') {
@@ -521,7 +525,7 @@ async function cashier() {
       body.innerHTML = `
         <p class="subtle" style="margin:0 0 4px">${escapeHtml(person.name)}</p>
         <p class="orama-modal-message" style="font:700 28px 'JetBrains Mono',monospace;color:var(--cream)">${money.format(subtotal)}</p>
-        <div class="filters" id="split-pay-methods" style="margin-bottom:16px">${PAYMENT_METHODS.map((m) => `<button type="button" class="pill ${m.id === payingMethod ? 'active' : ''}" data-split-method="${m.id}">${m.label}</button>`).join('')}</div>
+        <div class="filters" id="split-pay-methods" style="margin-bottom:16px">${SPLIT_PAYMENT_METHODS.map((m) => `<button type="button" class="pill ${m.id === payingMethod ? 'active' : ''}" data-split-method="${m.id}">${m.label}</button>`).join('')}</div>
         <div id="pay-fields">${paymentFieldsMarkup(payingMethod, subtotal)}</div>
         <div class="orama-modal-actions">
           <button type="button" class="button" data-split-pay-cancel>Cancelar</button>
@@ -544,7 +548,9 @@ async function cashier() {
       } else if (payingMethod === 'mixto') {
         const ef = Number(document.getElementById('pay-mixto-efectivo')?.value || 0);
         const ta = Number(document.getElementById('pay-mixto-tarjeta')?.value || 0);
-        if (ef + ta < subtotal) { Orama.toast('La suma no cubre el total', 'warning'); return; }
+        const diff = Math.abs((ef + ta) - subtotal);
+        if (ef <= 0 || ta <= 0) { Orama.toast('El pago mixto debe incluir efectivo y tarjeta', 'warning'); return; }
+        if (diff > PAYMENT_ROUNDING_TOLERANCE) { Orama.toast('La suma debe coincidir con el subtotal (tolerancia de redondeo: $0.01)', 'warning'); return; }
         amount_cash = ef;
         amount_card = ta;
       }

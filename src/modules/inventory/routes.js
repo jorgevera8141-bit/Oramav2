@@ -2,7 +2,12 @@ const express = require('express');
 const pool = require('../../config/database');
 const { notify } = require('../../shared/ntfy');
 const { validate } = require('../../middleware/validate');
-const { createInventoryItemSchema, updateInventoryItemSchema } = require('./schemas');
+const {
+  createInventoryItemSchema,
+  inventoryIdParamSchema,
+  restockInventoryItemSchema,
+  updateInventoryItemSchema
+} = require('./schemas');
 
 const router = express.Router();
 
@@ -45,13 +50,19 @@ router.delete('/inventory/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/inventory/:id/restock', async (req, res) => {
-  const id = Number(req.params.id);
-  const amount = Number((req.body || {}).amount || 0);
+router.post('/inventory/:id/restock', validate(inventoryIdParamSchema, 'params'), validate(restockInventoryItemSchema), async (req, res) => {
+  const { id } = req.params;
+  const { amount } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('UPDATE inventory_items SET current_stock = current_stock + $1, last_restocked_at = NOW() WHERE id = $2', [amount, id]);
+    const updateResult = await client.query(
+      'UPDATE inventory_items SET current_stock = current_stock + $1, last_restocked_at = NOW() WHERE id = $2 RETURNING id',
+      [amount, id]
+    );
+    if (!updateResult.rowCount) {
+      throw Object.assign(new Error('Artículo de inventario no encontrado'), { statusCode: 404 });
+    }
     await client.query(
       'INSERT INTO inventory_movements (inventory_item_id, change_amount, reason, note) VALUES ($1, $2, \'restock\', $3)',
       [id, amount, 'Manual restock']
