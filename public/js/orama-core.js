@@ -17,8 +17,37 @@ function apiErrorMessage(data) {
   return parts.length ? `${base}: ${parts.join(' · ')}` : base;
 }
 async function api(path, options) { const response = await fetch(path, options); const data = await response.json(); if (!response.ok || data.success === false) { const error = new Error(apiErrorMessage(data)); error.status = response.status; throw error; } return data; }
-function pageHead(eyebrow, title, subtitle = '', photo = '') { const head = `<div class="page-head"><div><p class="eyebrow">${escapeHtml(eyebrow)}</p><h1>${escapeHtml(title)}</h1>${subtitle ? `<p class="subtle">${escapeHtml(subtitle)}</p>` : ''}</div></div>`; return photo ? `<div class="hero-banner" style="background-image:url('${photo}')">${head}</div>` : head; }
-function statusBadge(status) { const map = { disponible: 'available', ocupada: 'occupied', cerrada: 'closed', cancelada: 'cancelled' }; return `<span class="badge ${map[status] || ''}">${escapeHtml(status)}</span>`; }
+function safeBackgroundImage(photo) {
+  const raw = String(photo || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('/') && !raw.startsWith('//')) {
+    return `url('${encodeURI(raw).replace(/'/g, '%27')}')`;
+  }
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    if (!/^https?:$/.test(parsed.protocol)) return '';
+    return `url('${encodeURI(parsed.href).replace(/'/g, '%27')}')`;
+  } catch (_error) {
+    return '';
+  }
+}
+function pageHead(eyebrow, title, subtitle = '', photo = '') {
+  const head = `<div class="page-head"><div><p class="eyebrow">${escapeHtml(eyebrow)}</p><h1>${escapeHtml(title)}</h1>${subtitle ? `<p class="subtle">${escapeHtml(subtitle)}</p>` : ''}</div></div>`;
+  const background = safeBackgroundImage(photo);
+  return background ? `<div class="hero-banner" style="background-image:${background}">${head}</div>` : head;
+}
+function statusBadge(status) {
+  const key = String(status || '').toLowerCase();
+  const map = {
+    disponible: { cls: 'available', icon: '●' },
+    abierta: { cls: 'live', icon: '◉' },
+    ocupada: { cls: 'occupied', icon: '●' },
+    cerrada: { cls: 'closed', icon: '●' },
+    cancelada: { cls: 'cancelled', icon: '●' }
+  };
+  const state = map[key] || { cls: 'neutral', icon: '●' };
+  return `<span class="badge badge-estado ${state.cls}"><span class="badge-dot" aria-hidden="true">${state.icon}</span>${escapeHtml(status)}</span>`;
+}
 function setActive(route) { document.querySelectorAll('[data-route]').forEach((link) => { if (link.dataset.route === route) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }); }
 
 const ICON_PATHS = {
@@ -42,8 +71,42 @@ function icon(name) {
 }
 
 (function initNavMore() {
+  const shellToggle = document.querySelector('[data-nav-shell-toggle]');
+  const nav = document.getElementById('main-nav');
   const toggle = document.querySelector('[data-nav-more-toggle]');
   const menu = document.querySelector('[data-nav-more-menu]');
+  if (shellToggle && nav) {
+    const mobileQuery = window.matchMedia('(max-width: 900px)');
+    const syncShellVisibility = (open) => {
+      if (!mobileQuery.matches) {
+        nav.hidden = false;
+        nav.setAttribute('aria-hidden', 'false');
+        shellToggle.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('nav-shell-open');
+        return;
+      }
+      nav.hidden = !open;
+      nav.setAttribute('aria-hidden', open ? 'false' : 'true');
+      shellToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      document.body.classList.toggle('nav-shell-open', open);
+    };
+    const closeShell = () => {
+      syncShellVisibility(false);
+    };
+    shellToggle.addEventListener('click', () => {
+      const willOpen = !document.body.classList.contains('nav-shell-open');
+      syncShellVisibility(willOpen);
+    });
+    nav.addEventListener('click', (event) => { if (event.target.closest('a')) closeShell(); });
+    window.addEventListener('hashchange', closeShell);
+    mobileQuery.addEventListener('change', () => syncShellVisibility(document.body.classList.contains('nav-shell-open')));
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !document.body.classList.contains('nav-shell-open')) return;
+      closeShell();
+      shellToggle.focus();
+    });
+    syncShellVisibility(false);
+  }
   if (!toggle || !menu) return;
   const close = () => { toggle.setAttribute('aria-expanded', 'false'); menu.hidden = true; };
   const open = () => {
