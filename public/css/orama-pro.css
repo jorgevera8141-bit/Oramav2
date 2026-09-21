@@ -178,7 +178,7 @@ main{position:relative;z-index:1}
 .closed{color:#bcb2a4}
 .cancelled{color:var(--terracotta)}
 
-th{
+.table-wrap thead th{
   position:sticky;
   top:0;
   background:rgba(20,17,14,.94);
