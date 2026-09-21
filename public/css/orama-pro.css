@@ -218,14 +218,9 @@ tbody tr:hover{background:rgba(42,157,143,.12)}
   .main-nav a,.nav-more-toggle{padding:8px 10px}
   .menu-items-grid{grid-template-columns:1fr}
   .ops-alert-strip{align-items:flex-start;flex-direction:column}
-  .table-wrap table[data-responsive-cards="true"]{min-width:0;border-collapse:separate;border-spacing:0 10px}
-  .table-wrap table[data-responsive-cards="true"] thead{display:none}
-  .table-wrap table[data-responsive-cards="true"] tbody{display:grid;gap:10px}
-  .table-wrap table[data-responsive-cards="true"] tbody tr{display:grid;gap:8px;padding:12px;border:1px solid var(--edge-crystal);border-radius:12px;background:var(--surface-crystal-soft)}
-  .table-wrap table[data-responsive-cards="true"] tbody td{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0;border:0}
-  .table-wrap table[data-responsive-cards="true"] tbody td::before{content:attr(data-label);color:var(--muted);font:600 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase}
-  .table-wrap table[data-responsive-cards="true"] tbody td[data-label="Acciones"]{display:block}
-  .table-wrap table[data-responsive-cards="true"] tbody td[data-label="Acciones"]::before{display:block;margin-bottom:8px}
-  .table-wrap table[data-responsive-cards="true"] .action-row{gap:8px}
-  .table-wrap table[data-responsive-cards="true"] .action-row .button{flex:1;padding-inline:10px}
+  .table-wrap table[data-responsive-cards="true"]{min-width:520px}
+  .table-wrap table[data-responsive-cards="true"] th,
+  .table-wrap table[data-responsive-cards="true"] td{padding:10px 8px}
+  .table-wrap table[data-responsive-cards="true"] .action-row{gap:6px}
+  .table-wrap table[data-responsive-cards="true"] .action-row .button{padding-inline:10px;min-height:40px}
 }
