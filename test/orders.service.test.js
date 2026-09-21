@@ -33,6 +33,13 @@ test('validateClosePayment rejects ordinary underpayment', () => {
   );
 });
 
+test('validateClosePayment rejects an unknown payment method at the service layer', () => {
+  assert.throws(
+    () => validateClosePayment(100, { payment_method: 'bitcoin', amount_cash: 100 }),
+    (error) => error.statusCode === 400 && error.message === 'Debes indicar un método de pago válido para cerrar la orden.'
+  );
+});
+
 test('validateClosePayment rejects ordinary overpayment beyond the rounding tolerance', () => {
   assert.throws(
     () => validateClosePayment(100, { payment_method: 'tarjeta', amount_card: 100 + PAYMENT_ROUNDING_TOLERANCE + 0.01 }),
@@ -73,6 +80,13 @@ test('validateClosePayment rejects split payments that do not match the order to
 test('validateClosePayment rejects an explicitly empty split-payment list', () => {
   assert.throws(
     () => validateClosePayment(100, { payment_method: 'dividido', pagos: [] }),
+    (error) => error.statusCode === 400 && error.message === 'Debes registrar al menos un pago dividido.'
+  );
+});
+
+test('validateClosePayment rejects payment_method dividido without a pagos list', () => {
+  assert.throws(
+    () => validateClosePayment(100, { payment_method: 'dividido' }),
     (error) => error.statusCode === 400 && error.message === 'Debes registrar al menos un pago dividido.'
   );
 });

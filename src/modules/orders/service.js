@@ -5,6 +5,7 @@ const { findOrCreateCustomer, awardStamp, redeemRewardWithClient } = require('..
 
 const PAYMENT_ROUNDING_TOLERANCE = 0.01;
 const ZERO_DUE_PAYMENT_METHODS = new Set(['cortesia', 'cliente_frecuente']);
+const VALID_PAYMENT_METHODS = new Set(['efectivo', 'tarjeta', 'mixto', 'cortesia', 'cliente_frecuente', 'dividido']);
 
 async function deductInventoryForOrder(client, orderId) {
   const { rows: items } = await client.query('SELECT item_nombre, cantidad FROM orden_items WHERE orden_id = $1', [orderId]);
@@ -46,6 +47,7 @@ function normalizeAmount(value, fieldName) {
 function normalizePaymentEntry(payment, { split = false } = {}) {
   const paymentMethod = payment?.payment_method;
   if (!paymentMethod) badPayment('Debes indicar un método de pago válido para cerrar la orden.');
+  if (!VALID_PAYMENT_METHODS.has(paymentMethod)) badPayment('Debes indicar un método de pago válido para cerrar la orden.');
 
   const amountCash = normalizeAmount(payment.amount_cash, 'efectivo');
   const amountCard = normalizeAmount(payment.amount_card, 'tarjeta');
@@ -89,6 +91,9 @@ function normalizePaymentEntry(payment, { split = false } = {}) {
 
 function validateClosePayment(orderTotal, payload = {}) {
   const total = Number(orderTotal || 0);
+  if (payload.payment_method === 'dividido' && !Array.isArray(payload.pagos)) {
+    badPayment('Debes registrar al menos un pago dividido.');
+  }
   if (Array.isArray(payload.pagos)) {
     if (!payload.pagos.length) {
       badPayment('Debes registrar al menos un pago dividido.');
