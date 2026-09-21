@@ -47,11 +47,11 @@ async function dashboard() {
       <div class="ops-alert-row">
         <span class="badge badge-estado ${lowStockCount ? 'warn' : 'live'}">${lowStockCount ? '⚠' : '✓'} Inventario ${lowStockCount ? 'en atención' : 'estable'}</span>
       </div>
-      ${orderTable(open)}
+      ${orderTable(open, 'No hay órdenes abiertas')}
     </section>`;
 }
 
-function orderTable(orders) {
+function orderTable(orders, emptyMessage = 'Sin órdenes registradas') {
   return `<div class="table-wrap">
     <table>
       <thead>
@@ -77,7 +77,7 @@ function orderTable(orders) {
               </div>`
       : '—'}</td>
         </tr>`).join('')
-    : '<tr><td class="empty" colspan="5">No hay órdenes abiertas</td></tr>'}
+    : `<tr><td class="empty" colspan="5">${escapeHtml(emptyMessage)}</td></tr>`}
       </tbody>
     </table>
   </div>`;
@@ -96,7 +96,7 @@ async function orders() {
   const data = await api('/api/ordenes');
   const rows = data.ordenes || [];
   app.innerHTML = pageHead('Operación', 'Órdenes', 'Seguimiento de ventas y cobros') +
-    `<section class="panel crystal-card">${orderTable(rows)}</section>`;
+    `<section class="panel crystal-card">${orderTable(rows, 'Sin órdenes registradas')}</section>`;
 }
 
 async function staff() {
@@ -137,6 +137,7 @@ document.addEventListener('click', async (event) => {
     }
     await render();
   } catch (error) {
-    app.innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
+    Orama.toast(error.message, 'error');
+    (row ? row.querySelectorAll('button') : [button]).forEach((b) => { b.disabled = false; });
   }
 });

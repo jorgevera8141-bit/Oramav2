@@ -6,6 +6,7 @@ async function nuevaOrden() {
 
   const state = { mesa: null, cart: [], category: 'Todos', query: '', cartOpen: false, pricing: null };
   let previewTimer = null;
+  let previewRequestId = 0;
 
   function filteredItems() {
     return items.filter((item) =>
@@ -64,24 +65,35 @@ async function nuevaOrden() {
   }
 
   function refreshCategories() {
-    document.querySelectorAll('[data-category]').forEach((button) => button.classList.toggle('active', button.dataset.category === state.category));
+    document.querySelectorAll('[data-category]').forEach((button) => {
+      const active = button.dataset.category === state.category;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
   }
 
   function schedulePreview() {
     clearTimeout(previewTimer);
     if (!state.cart.length) {
+      previewRequestId += 1;
       state.pricing = null;
       refreshCart();
       return;
     }
     previewTimer = setTimeout(async () => {
+      previewRequestId += 1;
+      const currentRequestId = previewRequestId;
+      const previewItems = state.cart.map((line) => ({ menu_item_id: line.id, cantidad: line.cantidad }));
       try {
-        state.pricing = await api('/api/promotions/preview', {
+        const preview = await api('/api/promotions/preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: state.cart.map((line) => ({ menu_item_id: line.id, cantidad: line.cantidad })) })
+          body: JSON.stringify({ items: previewItems })
         });
+        if (currentRequestId !== previewRequestId) return;
+        state.pricing = preview;
       } catch (_error) {
+        if (currentRequestId !== previewRequestId) return;
         state.pricing = null;
       }
       refreshCart();
@@ -150,7 +162,7 @@ async function nuevaOrden() {
       `<section class="panel crystal-card new-order-workspace">
         <div class="new-order-toolbar">
           <div class="search-field"><label for="cart-search">Buscar</label><input class="search" id="cart-search" type="search" placeholder="Ej. Capuchino"></div>
-          <div class="category-strip">${categories.map((category) => `<button type="button" class="pill ${category === state.category ? 'active' : ''}" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`).join('')}</div>
+          <div class="category-strip">${categories.map((category) => `<button type="button" class="pill ${category === state.category ? 'active' : ''}" data-category="${escapeHtml(category)}" aria-pressed="${category === state.category ? 'true' : 'false'}">${escapeHtml(category)}</button>`).join('')}</div>
         </div>
         <div class="new-order-layout">
           <div id="cart-menu-items" class="new-order-menu">${menuItemsMarkup()}</div>
@@ -185,9 +197,8 @@ async function nuevaOrden() {
 
     const addButton = event.target.closest('[data-add-id]');
     if (addButton) {
-      addToCart(Number(addButton.dataset.addId));
       if (window.matchMedia('(min-width: 900px)').matches) state.cartOpen = true;
-      refreshCart();
+      addToCart(Number(addButton.dataset.addId));
       return;
     }
 

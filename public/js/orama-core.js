@@ -17,7 +17,25 @@ function apiErrorMessage(data) {
   return parts.length ? `${base}: ${parts.join(' · ')}` : base;
 }
 async function api(path, options) { const response = await fetch(path, options); const data = await response.json(); if (!response.ok || data.success === false) { const error = new Error(apiErrorMessage(data)); error.status = response.status; throw error; } return data; }
-function pageHead(eyebrow, title, subtitle = '', photo = '') { const head = `<div class="page-head"><div><p class="eyebrow">${escapeHtml(eyebrow)}</p><h1>${escapeHtml(title)}</h1>${subtitle ? `<p class="subtle">${escapeHtml(subtitle)}</p>` : ''}</div></div>`; return photo ? `<div class="hero-banner" style="background-image:url('${photo}')">${head}</div>` : head; }
+function safeBackgroundImage(photo) {
+  const raw = String(photo || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('/') && !raw.startsWith('//')) {
+    return `url('${encodeURI(raw).replace(/'/g, '%27')}')`;
+  }
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    if (!/^https?:$/.test(parsed.protocol)) return '';
+    return `url('${encodeURI(parsed.href).replace(/'/g, '%27')}')`;
+  } catch (_error) {
+    return '';
+  }
+}
+function pageHead(eyebrow, title, subtitle = '', photo = '') {
+  const head = `<div class="page-head"><div><p class="eyebrow">${escapeHtml(eyebrow)}</p><h1>${escapeHtml(title)}</h1>${subtitle ? `<p class="subtle">${escapeHtml(subtitle)}</p>` : ''}</div></div>`;
+  const background = safeBackgroundImage(photo);
+  return background ? `<div class="hero-banner" style="background-image:${background}">${head}</div>` : head;
+}
 function statusBadge(status) {
   const key = String(status || '').toLowerCase();
   const map = {
@@ -58,17 +76,36 @@ function icon(name) {
   const toggle = document.querySelector('[data-nav-more-toggle]');
   const menu = document.querySelector('[data-nav-more-menu]');
   if (shellToggle && nav) {
+    const mobileQuery = window.matchMedia('(max-width: 900px)');
+    const syncShellVisibility = (open) => {
+      if (!mobileQuery.matches) {
+        nav.hidden = false;
+        nav.setAttribute('aria-hidden', 'false');
+        shellToggle.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('nav-shell-open');
+        return;
+      }
+      nav.hidden = !open;
+      nav.setAttribute('aria-hidden', open ? 'false' : 'true');
+      shellToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      document.body.classList.toggle('nav-shell-open', open);
+    };
     const closeShell = () => {
-      document.body.classList.remove('nav-shell-open');
-      shellToggle.setAttribute('aria-expanded', 'false');
+      syncShellVisibility(false);
     };
     shellToggle.addEventListener('click', () => {
       const willOpen = !document.body.classList.contains('nav-shell-open');
-      document.body.classList.toggle('nav-shell-open', willOpen);
-      shellToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      syncShellVisibility(willOpen);
     });
     nav.addEventListener('click', (event) => { if (event.target.closest('a')) closeShell(); });
     window.addEventListener('hashchange', closeShell);
+    mobileQuery.addEventListener('change', () => syncShellVisibility(document.body.classList.contains('nav-shell-open')));
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !document.body.classList.contains('nav-shell-open')) return;
+      closeShell();
+      shellToggle.focus();
+    });
+    syncShellVisibility(false);
   }
   if (!toggle || !menu) return;
   const close = () => { toggle.setAttribute('aria-expanded', 'false'); menu.hidden = true; };

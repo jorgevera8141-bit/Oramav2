@@ -1,4 +1,5 @@
 (function () {
+  let dialogSequence = 0;
   function ensureToastRoot() {
     let root = document.getElementById('orama-toast-root');
     if (!root) {
@@ -25,9 +26,12 @@
   }
 
   function dialog({ title = 'Confirmación', message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false, input = null }) {
+    if (document.querySelector('.orama-overlay')) return Promise.resolve(input ? null : false);
     return new Promise((resolve) => {
-      const titleId = `orama-modal-title-${Date.now()}`;
-      const messageId = `orama-modal-message-${Date.now()}`;
+      dialogSequence += 1;
+      const idSuffix = `${Date.now()}-${dialogSequence}`;
+      const titleId = `orama-modal-title-${idSuffix}`;
+      const messageId = `orama-modal-message-${idSuffix}`;
       const overlay = document.createElement('div');
       overlay.className = 'orama-overlay';
       overlay.innerHTML = `<div class="orama-modal crystal-card" role="dialog" aria-modal="true" aria-labelledby="${titleId}" aria-describedby="${messageId}">`
@@ -45,6 +49,28 @@
       else overlay.querySelector('[data-ui="confirm"]').focus();
 
       const onKey = (event) => {
+        if (event.key === 'Tab') {
+          const focusables = Array.from(overlay.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'))
+            .filter((el) => !el.disabled && !el.hasAttribute('hidden') && el.tabIndex >= 0 && el.getClientRects().length > 0);
+          if (!focusables.length) return;
+          const first = focusables[0];
+          const last = focusables[focusables.length - 1];
+          if (!overlay.contains(document.activeElement)) {
+            event.preventDefault();
+            (event.shiftKey ? last : first).focus();
+            return;
+          }
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+            return;
+          }
+          if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+            return;
+          }
+        }
         if (event.key === 'Escape') close(input ? null : false);
       };
 
