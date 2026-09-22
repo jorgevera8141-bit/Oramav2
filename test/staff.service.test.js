@@ -130,6 +130,37 @@ test('summarizeSessionRows aggregates total hours and session counts per staff m
   ]);
 });
 
+test('summarizeSessionRows ignores session rows that contribute zero minutes in range', () => {
+  const summary = summarizeSessionRows(
+    [
+      {
+        id: 7,
+        staff_id: 3,
+        nombre: 'Carla',
+        tipo: 'staff',
+        idioma: 'es',
+        activo: 1,
+        login_time: '2026-09-21T10:00:00.000Z',
+        logout_time: '2026-09-21T12:00:00.000Z'
+      }
+    ],
+    { from: '2026-09-22', to: '2026-09-22' }
+  );
+
+  assert.deepEqual(summary, [
+    {
+      staff_id: 3,
+      nombre: 'Carla',
+      tipo: 'staff',
+      idioma: 'es',
+      activo: 1,
+      sessions_count: 0,
+      total_minutes: 0,
+      total_hours: 0
+    }
+  ]);
+});
+
 test('getHoursSummary includes staff with no sessions in the selected range', async () => {
   const db = createDbMock(async () => ({
     rows: [

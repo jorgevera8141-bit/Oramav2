@@ -86,7 +86,7 @@ function summarizeSessionRows(rows, range, now = new Date()) {
       });
     }
     const item = summaryByStaff.get(key);
-    if (row.id && row.login_time) {
+    if (row.id && row.login_time && workedMinutes > 0) {
       item.sessions_count += 1;
       item.total_minutes += workedMinutes;
     }
@@ -127,23 +127,19 @@ async function clockIn(data, db = pool, now = new Date()) {
 
 async function clockOut(data, db = pool, now = new Date()) {
   const staff = await verifyStaffPin(data.nombre, data.pin, null, db);
-  const { rows: activeRows } = await db.query(
-    `SELECT id
-     FROM staff_sessions
-     WHERE staff_id = $1 AND logout_time IS NULL
-     ORDER BY login_time DESC
-     LIMIT 1`,
-    [staff.id]
-  );
-  if (!activeRows[0]) {
-    throw staffError('No hay una sesión activa para cerrar.', 409);
-  }
   const { rows } = await db.query(
     `UPDATE staff_sessions
      SET logout_time = CURRENT_TIMESTAMP
-     WHERE id = $1 AND logout_time IS NULL
+     WHERE id = (
+       SELECT id
+       FROM staff_sessions
+       WHERE staff_id = $1 AND logout_time IS NULL
+       ORDER BY login_time DESC
+       LIMIT 1
+     )
+       AND logout_time IS NULL
      RETURNING id, staff_id, screen, login_time, logout_time`,
-    [activeRows[0].id]
+    [staff.id]
   );
   if (!rows[0]) {
     throw staffError('No hay una sesión activa para cerrar.', 409);

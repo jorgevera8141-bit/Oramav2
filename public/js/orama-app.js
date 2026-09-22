@@ -122,7 +122,7 @@ async function staff() {
             </div>
             <div class="field-group">
               <label for="staff-attendance-pin">PIN</label>
-              <input id="staff-attendance-pin" class="search" type="password" inputmode="numeric" maxlength="10" autocomplete="current-password">
+              <input id="staff-attendance-pin" class="search" type="password" inputmode="numeric" maxlength="10" autocomplete="off">
             </div>
             <div class="field-group">
               <label for="staff-attendance-screen">Pantalla / contexto (opcional)</label>
