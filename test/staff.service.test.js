@@ -5,7 +5,8 @@ const {
   sessionRangeMinutes,
   clockIn,
   clockOut,
-  summarizeSessionRows
+  summarizeSessionRows,
+  getHoursSummary
 } = require('../src/modules/staff/service');
 
 function createDbMock(...handlers) {
@@ -125,6 +126,58 @@ test('summarizeSessionRows aggregates total hours and session counts per staff m
       sessions_count: 1,
       total_minutes: 60,
       total_hours: 1
+    }
+  ]);
+});
+
+test('getHoursSummary includes staff with no sessions in the selected range', async () => {
+  const db = createDbMock(async () => ({
+    rows: [
+      {
+        staff_id: 1,
+        nombre: 'Ana',
+        tipo: 'staff',
+        idioma: 'es',
+        activo: 1,
+        id: 10,
+        login_time: '2026-09-22T08:00:00.000Z',
+        logout_time: '2026-09-22T10:00:00.000Z'
+      },
+      {
+        staff_id: 2,
+        nombre: 'Beto',
+        tipo: 'management',
+        idioma: 'es',
+        activo: 1,
+        id: null,
+        login_time: null,
+        logout_time: null
+      }
+    ]
+  }));
+
+  const summary = await getHoursSummary({ from: '2026-09-22', to: '2026-09-22' }, db);
+
+  assert.deepEqual(summary, [
+    {
+      staff_id: 1,
+      nombre: 'Ana',
+      tipo: 'staff',
+      idioma: 'es',
+      activo: 1,
+      sessions_count: 1,
+      total_minutes: 120,
+      total_hours: 2
+    },
+    {
+      staff_id: 2,
+      nombre: 'Beto',
+      tipo: 'management',
+      idioma: 'es',
+      activo: 1,
+      sessions_count: 0,
+      total_minutes: 0,
+      total_hours: 0
     }
   ]);
 });

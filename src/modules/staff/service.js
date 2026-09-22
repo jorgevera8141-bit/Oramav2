@@ -86,8 +86,10 @@ function summarizeSessionRows(rows, range, now = new Date()) {
       });
     }
     const item = summaryByStaff.get(key);
-    item.sessions_count += 1;
-    item.total_minutes += workedMinutes;
+    if (row.id && row.login_time) {
+      item.sessions_count += 1;
+      item.total_minutes += workedMinutes;
+    }
   }
   return [...summaryByStaff.values()]
     .map((item) => ({ ...item, total_hours: formatHours(item.total_minutes) }))
@@ -193,12 +195,13 @@ async function getStaffSessions(staffId, range, db = pool, now = new Date()) {
 
 async function getHoursSummary(range, db = pool, now = new Date()) {
   const { rows } = await db.query(
-    `SELECT ss.id, ss.staff_id, ss.login_time, ss.logout_time,
-            s.nombre, s.tipo, s.idioma, s.activo
-     FROM staff_sessions ss
-     JOIN staff s ON s.id = ss.staff_id
-     WHERE ss.login_time < ($2::date + INTERVAL '1 day')
-       AND COALESCE(ss.logout_time, CURRENT_TIMESTAMP) >= $1::date
+    `SELECT s.id AS staff_id, s.nombre, s.tipo, s.idioma, s.activo,
+            ss.id, ss.login_time, ss.logout_time
+     FROM staff s
+     LEFT JOIN staff_sessions ss
+       ON s.id = ss.staff_id
+      AND ss.login_time < ($2::date + INTERVAL '1 day')
+      AND COALESCE(ss.logout_time, CURRENT_TIMESTAMP) >= $1::date
      ORDER BY s.nombre ASC, ss.login_time ASC`,
     [range.from, range.to]
   );

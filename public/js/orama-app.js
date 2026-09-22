@@ -404,7 +404,7 @@ async function staff() {
 
   elapsedTimer = window.setInterval(tickElapsedDurations, 60000);
   refreshTimer = window.setInterval(() => {
-    loadClockedIn({ silent: true }).catch((error) => console.error(error));
+    loadClockedIn({ silent: true });
   }, 90000);
 
   return () => {
