@@ -372,7 +372,7 @@ async function staff() {
 
     if (event.target.closest('[data-staff-summary-today]')) {
       resetSummaryRangeToToday();
-      await loadSummary();
+      await refreshAttendanceData();
       return;
     }
 
