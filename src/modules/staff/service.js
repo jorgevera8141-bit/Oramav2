@@ -6,7 +6,10 @@ function staffError(message, statusCode) {
 }
 
 function currentDateString(now = new Date()) {
-  return now.toISOString().slice(0, 10);
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeDateRange(query = {}, now = new Date()) {
@@ -44,8 +47,8 @@ function sessionRangeMinutes(session, range, now = new Date()) {
   const loginTime = parseTimestamp(session.login_time);
   const logoutTime = parseTimestamp(session.logout_time) || now;
   if (!loginTime || logoutTime <= loginTime) return 0;
-  const rangeStart = new Date(`${range.from}T00:00:00`);
-  const rangeEnd = new Date(`${range.to}T23:59:59.999`);
+  const rangeStart = new Date(`${range.from}T00:00:00.000Z`);
+  const rangeEnd = new Date(`${range.to}T23:59:59.999Z`);
   const effectiveStart = loginTime > rangeStart ? loginTime : rangeStart;
   const effectiveEnd = logoutTime < rangeEnd ? logoutTime : rangeEnd;
   if (effectiveEnd <= effectiveStart) return 0;

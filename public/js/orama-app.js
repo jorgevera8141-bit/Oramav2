@@ -366,7 +366,7 @@ async function staff() {
 
   async function onClick(event) {
     if (event.target.closest('[data-staff-live-refresh]')) {
-      await loadClockedIn();
+      await refreshAttendanceData();
       return;
     }
 
