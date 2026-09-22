@@ -265,7 +265,7 @@ async function staff() {
       clockedInError = '';
     } catch (error) {
       clockedInError = error.message;
-      if (!options.silent) clockedIn = [];
+      clockedIn = [];
     } finally {
       loadingClockedIn = false;
       renderClockedIn();

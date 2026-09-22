@@ -47,8 +47,8 @@ function sessionRangeMinutes(session, range, now = new Date()) {
   const loginTime = parseTimestamp(session.login_time);
   const logoutTime = parseTimestamp(session.logout_time) || now;
   if (!loginTime || logoutTime <= loginTime) return 0;
-  const rangeStart = new Date(`${range.from}T00:00:00.000Z`);
-  const rangeEnd = new Date(`${range.to}T23:59:59.999Z`);
+  const rangeStart = new Date(`${range.from}T00:00:00`);
+  const rangeEnd = new Date(`${range.to}T23:59:59.999`);
   const effectiveStart = loginTime > rangeStart ? loginTime : rangeStart;
   const effectiveEnd = logoutTime < rangeEnd ? logoutTime : rangeEnd;
   if (effectiveEnd <= effectiveStart) return 0;
@@ -121,7 +121,7 @@ async function clockIn(data, db = pool, now = new Date()) {
     );
     return { staff, session: serializeSession(rows[0], now) };
   } catch (error) {
-    if (error?.code === '23505') {
+    if (error?.code === '23505' && error?.constraint === 'idx_staff_sessions_open_staff') {
       throw staffError('Este miembro del staff ya tiene una sesión activa.', 409);
     }
     throw error;
