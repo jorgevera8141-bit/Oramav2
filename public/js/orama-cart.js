@@ -13,7 +13,15 @@ async function nuevaOrden() {
 
   function menuItemsMarkup() {
     const filtered = filteredItems();
-    return filtered.length ? filtered.map((item) => `<div class="menu-item-card"><div><p class="menu-item-card-name">${escapeHtml(item.nombre)}</p><p class="menu-item-card-price">${money.format(Number(item.precio || 0))}</p></div><button type="button" class="button" data-add-id="${item.id}" aria-label="Agregar ${escapeHtml(item.nombre)}">Agregar</button></div>`).join('') : '<div class="empty">Sin resultados</div>';
+    return filtered.length
+      ? filtered.map((item) => `<article class="menu-item-card crystal-card menu-product-card">
+          <div class="menu-item-card-meta">
+            <p class="menu-item-card-name">${escapeHtml(item.nombre)}</p>
+            <p class="menu-item-card-price">${money.format(Number(item.precio || 0))}</p>
+          </div>
+          <button type="button" class="button" data-add-id="${item.id}" aria-label="Agregar ${escapeHtml(item.nombre)}">Agregar</button>
+        </article>`).join('')
+      : '<div class="empty">Sin resultados</div>';
   }
 
   function cartMarkup() {
@@ -24,7 +32,7 @@ async function nuevaOrden() {
     const promoRows = pricing && pricing.promociones_aplicadas.length
       ? pricing.promociones_aplicadas.map((promo) => `<div class="cart-item-row promo-row"><span class="cart-item-name">Promo ${escapeHtml(promo.nombre)}</span><span class="cart-item-price">-${money.format(promo.descuento)}</span></div>`).join('')
       : '';
-    return `<div class="cart-bar-inner">
+    return `<div class="cart-bar-inner crystal-card cart-shell">
       <div class="cart-summary" data-cart-toggle>
         <span class="cart-summary-count">${count} artículo${count === 1 ? '' : 's'}</span>
         <span class="cart-summary-total">${money.format(total)}</span>
@@ -107,7 +115,19 @@ async function nuevaOrden() {
 
   function renderMenuStep() {
     app.innerHTML = pageHead('Nueva orden', state.mesa.nombre, 'Toca un producto para agregarlo a la orden') +
-      `<section class="panel" style="margin-bottom:96px"><div class="filters"><div class="search-field"><label for="cart-search">Buscar</label><input class="search" id="cart-search" type="search" placeholder="Ej. Capuchino"></div>${categories.map((category) => { const photo = categoryPhotos[category]; return `<button type="button" class="pill ${category === state.category ? 'active' : ''} ${photo ? 'has-photo' : ''}" data-category="${escapeHtml(category)}"${photo ? ` style="--pill-photo:url('${photo}')"` : ''}>${escapeHtml(category)}</button>`; }).join('')}</div><div id="cart-menu-items">${menuItemsMarkup()}</div></section>` +
+      `<section class="panel order-workspace">
+        <div class="filters order-filters">
+          <div class="search-field">
+            <label for="cart-search">Buscar</label>
+            <input class="search" id="cart-search" type="search" placeholder="Ej. Capuchino">
+          </div>
+          ${categories.map((category) => {
+            const photo = categoryPhotos[category];
+            return `<button type="button" class="pill ${category === state.category ? 'active' : ''} ${photo ? 'has-photo' : ''}" data-category="${escapeHtml(category)}"${photo ? ` style="--pill-photo:url('${photo}')"` : ''}>${escapeHtml(category)}</button>`;
+          }).join('')}
+        </div>
+        <div id="cart-menu-items" class="menu-items-grid">${menuItemsMarkup()}</div>
+      </section>` +
       `<div class="cart-bar"><div id="cart-bar-root">${cartMarkup()}</div></div>`;
     document.getElementById('cart-search').addEventListener('input', (event) => { state.query = event.target.value.toLowerCase(); refreshItems(); });
   }
