@@ -267,6 +267,8 @@ async function initDb() {
   await pool.query('CREATE INDEX IF NOT EXISTS idx_inv_mov_order ON inventory_movements(order_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_recipe_menu ON recipe_items(menu_item_id)');
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_facturas_orden ON orama_facturas(orden_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_staff_sessions_staff_login ON staff_sessions(staff_id, login_time DESC)');
+  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_sessions_open_staff ON staff_sessions(staff_id) WHERE logout_time IS NULL');
   await pool.query(`CREATE OR REPLACE FUNCTION mx(ts timestamp) RETURNS timestamp AS $$ SELECT ts AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City' $$ LANGUAGE sql STABLE;`);
   await pool.query(`INSERT INTO orama_settings (key, value) VALUES ('margin_threshold_pct', '70') ON CONFLICT DO NOTHING`);
 }
