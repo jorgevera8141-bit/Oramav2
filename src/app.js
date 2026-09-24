@@ -15,6 +15,7 @@ const promotionsRoutes = require('./modules/promotions/routes');
 const socialPostsRoutes = require('./modules/social-posts/routes');
 const uploadsRoutes = require('./modules/uploads/routes');
 const loyaltyRoutes = require('./modules/loyalty/routes');
+const pricingRoutes = require('./modules/pricing/routes');
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api', gastosRoutes);
 app.use('/api', promotionsRoutes);
 app.use('/api', socialPostsRoutes);
 app.use('/api', uploadsRoutes);
+app.use('/api', pricingRoutes);
 app.use('/api', loyaltyRoutes);
 
 app.use((error, _req, res, _next) => {
@@ -94,6 +96,7 @@ async function initDb() {
     tipo TEXT NOT NULL,
     idioma TEXT DEFAULT 'es',
     activo INTEGER DEFAULT 1,
+    hourly_rate DECIMAL(10, 2) DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS staff_sessions (
@@ -102,6 +105,17 @@ async function initDb() {
     screen TEXT,
     login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     logout_time TIMESTAMP
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS time_clock (
+    id SERIAL PRIMARY KEY,
+    staff_id INTEGER REFERENCES staff(id) ON DELETE CASCADE,
+    clock_in TIMESTAMP NOT NULL,
+    clock_out TIMESTAMP,
+    break_start TIMESTAMP,
+    break_end TIMESTAMP,
+    total_break_minutes INTEGER DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS orama_facturas (
     id SERIAL PRIMARY KEY,
