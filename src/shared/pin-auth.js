@@ -4,12 +4,12 @@ function authError(message, statusCode) {
   return Object.assign(new Error(message), { statusCode });
 }
 
-async function verifyStaffPin(nombre, pin, requiredTipo) {
+async function verifyStaffPin(nombre, pin, requiredTipo, db = pool) {
   if (!nombre || !pin) {
     throw authError('Se requiere seleccionar tu nombre e ingresar tu PIN.', 401);
   }
-  const { rows } = await pool.query(
-    'SELECT id, nombre, tipo, activo FROM staff WHERE nombre = $1 AND pin = $2',
+  const { rows } = await db.query(
+    'SELECT id, nombre, tipo, idioma, activo FROM staff WHERE nombre = $1 AND pin = $2',
     [nombre, pin]
   );
   const staffMember = rows[0];

@@ -96,12 +96,6 @@ router.put('/staff/session', async (_req, res) => {
   res.json({ success: true });
 });
 
-router.get('/staff/active', async (_req, res) => {
-  const { rows } = await pool.query('SELECT id, nombre, tipo, idioma, activo, created_at FROM staff WHERE activo = 1 ORDER BY id ASC');
-  res.json({ success: true, staff: rows });
-});
-
-// Time-clock endpoints
 router.post('/staff/time-clock/clock-in', verifyAdmin, async (req, res) => {
   const { staff_id } = req.body;
   if (!staff_id) {
@@ -260,7 +254,7 @@ router.post('/staff/:staffId/hourly-rate', verifyAdmin, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Staff ID is required' });
   }
 
-  if (hourly_rate === undefined || hourly_rate === null || isNaN(parseFloat(hourly_rate))) {
+  if (hourly_rate === undefined || hourl === null || isNaN(parseFloat(hourly_rate))) {
     return res.status(400).json({ success: false, error: 'Valid hourly rate is required' });
   }
 
@@ -380,9 +374,11 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
         clockIn: day.clock_in.toISOString(),
         clockOut: day.clock_out ? day.clock_out.toISOString() : null,
         breakMinutes: day.total_break_minutes || 0
-      })))
+      }))
     }
   });
+});
+
 // Payroll endpoints
 router.get('/staff/payroll/weekly', verifyAdmin, async (req, res) => {
   // Get all staff with their weekly summaries
@@ -510,7 +506,7 @@ router.post('/staff/payroll/tips-distribution', verifyAdmin, async (req, res) =>
       distribution = staffHoursData.map(item => ({
         staffId: item.staff.id,
         nombre: item.staff.nombre,
-        tipo: item.staff.tipo,
+        tipo: item.tipo,
         hoursWorked: parseFloat(item.hours.toFixed(2)),
         amount: parseFloat((tips * (item.hours / totalHours)).toFixed(2))
       }));
