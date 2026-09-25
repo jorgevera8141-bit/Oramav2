@@ -45,6 +45,10 @@ function icon(name) {
   const toggle = document.querySelector('[data-nav-more-toggle]');
   const menu = document.querySelector('[data-nav-more-menu]');
   if (!toggle || !menu) return;
+  // Reparent to <body>: on WebKit, the header's backdrop-filter turns it into
+  // the containing block for position:fixed descendants, so the menu was
+  // being clipped by .main-nav's overflow-x:auto instead of floating over it.
+  document.body.appendChild(menu);
   const close = () => { toggle.setAttribute('aria-expanded', 'false'); menu.hidden = true; };
   const open = () => {
     const rect = toggle.getBoundingClientRect();
