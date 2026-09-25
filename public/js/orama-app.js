@@ -800,13 +800,15 @@ async function nomina() {
     }
   } catch (error) {
     Orama.toast('Error al acceder a nómina: ' + error.message, 'error');
+    console.error(error);
+  }
+}
 
 async function pricing() {
   // Check if user is management via PIN
   const { nombre, pin } = await Orama.prompt([
     { label: 'Nombre', name: 'nombre' },
     { label: 'PIN', name: 'pin', type: 'password' }
-Orama.routes.pricing = pricing;
   ], { title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
 
   if (!nombre || !pin) {
@@ -1182,12 +1184,13 @@ window.removeIngredient = removeIngredient;
 window.calculatePrice = calculatePrice;
 window.saveAsRecipe = saveAsRecipe;
 window.loadSavedRecipes = loadSavedRecipes;
-}
 
 Orama.routes.dashboard = dashboard;
 Orama.routes.mesas = mesas;
 Orama.routes.ordenes = orders;
 Orama.routes.staff = staff;
+Orama.routes.nomina = nomina;
+Orama.routes.pricing = pricing;
 
 document.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-action]');

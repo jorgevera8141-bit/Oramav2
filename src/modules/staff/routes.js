@@ -1,6 +1,9 @@
 const express = require('express');
 const pool = require('../../config/database');
 const { verifyStaffPin } = require('../../shared/pin-auth');
+const { validate } = require('../../middleware/validate');
+const { clockPayloadSchema } = require('./schemas');
+const staffService = require('./service');
 
 const router = express.Router();
 
@@ -59,41 +62,26 @@ router.get('/staff/active', async (_req, res) => {
   res.json({ success: true, staff: rows });
 });
 
-router.get('/staff', async (_req, res) => {
-  const { rows } = await pool.query('SELECT id, nombre, tipo, idioma, activo, created_at FROM staff ORDER BY id ASC');
-  res.json({ success: true, staff: rows });
+// PIN-based attendance (staff_sessions table, via the service layer)
+router.post('/staff/clock-in', validate(clockPayloadSchema), async (req, res) => {
+  const result = await staffService.clockIn(req.body);
+  res.status(201).json({ success: true, staff: result.staff, session: result.session });
 });
 
-router.post('/staff', async (req, res) => {
-  const b = req.body || {};
-  const { rows } = await pool.query(
-    'INSERT INTO staff (nombre, pin, tipo, idioma, activo) VALUES ($1, $2, $3, COALESCE($4, \'es\'), COALESCE($5, 1)) RETURNING *',
-    [b.nombre, b.pin, b.tipo, b.idioma, b.activo]
-  );
-  res.status(201).json({ success: true, member: rows[0] });
+router.post('/staff/clock-out', validate(clockPayloadSchema), async (req, res) => {
+  const result = await staffService.clockOut(req.body);
+  res.json({ success: true, staff: result.staff, session: result.session });
 });
 
-router.put('/staff/:id', async (req, res) => {
-  const b = req.body || {};
-  const { rows } = await pool.query(
-    `UPDATE staff
-     SET nombre = COALESCE($1, nombre),
-         pin = COALESCE($2, pin),
-         tipo = COALESCE($3, tipo),
-         idioma = COALESCE($4, idioma),
-         activo = COALESCE($5, activo)
-     WHERE id = $6 RETURNING *`,
-    [b.nombre, b.pin, b.tipo, b.idioma, b.activo, Number(req.params.id)]
-  );
-  res.json({ success: true, member: rows[0] || null });
+router.get('/staff/clocked-in', async (_req, res) => {
+  const staff = await staffService.listClockedInStaff();
+  res.json({ success: true, staff });
 });
 
-router.post('/staff/login', async (_req, res) => {
-  res.json({ success: true });
-});
-
-router.put('/staff/session', async (_req, res) => {
-  res.json({ success: true });
+router.get('/staff/hours-summary', async (req, res) => {
+  const range = staffService.normalizeDateRange(req.query);
+  const summary = await staffService.getHoursSummary(range);
+  res.json({ success: true, summary });
 });
 
 router.post('/staff/time-clock/clock-in', verifyAdmin, async (req, res) => {
@@ -254,7 +242,7 @@ router.post('/staff/:staffId/hourly-rate', verifyAdmin, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Staff ID is required' });
   }
 
-  if (hourly_rate === undefined || hourl === null || isNaN(parseFloat(hourly_rate))) {
+  if (hourly_rate === undefined || hourly_rate === null || isNaN(parseFloat(hourly_rate))) {
     return res.status(400).json({ success: false, error: 'Valid hourly rate is required' });
   }
 
