@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *src/modules/*|*/test/*|test/*) out=$(npm test 2>&1 | tail -c 4000); jq -n --arg out \"$out\" '{hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContext:(\"Test run after edit:\\n\" + $out)}}';; esac; }",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | { read -r f; case \"$f\" in *src/modules/*|*/test/*|test/*) out=$(npm test 2>&1 | tail -c 4000); jq -n --arg out \"$out\" '{hookSpecificOutput:{hookEventName:\"PostToolUse\",additionalContent:(\"Test run after edit:\\n\" + $out)}}';; *public/js/*|*.css|*.html) ;; esac; }",
             "timeout": 60,
             "statusMessage": "Running tests..."
           }

@@ -1,8 +1,8 @@
 const categoryPhotos = {
   'Especialidades de Cafe': '/images/coffee-beans.jpg',
   'Cafe Espresso y Chocolate': '/images/coffee-beans.jpg',
-  Reposteria: '/images/pastries.jpg',
-  Tes: '/images/iced-tea.jpg'
+  'Reposteria': '/images/pastries.jpg',
+  'Tes': '/images/iced-tea.jpg'
 };
 
 function localDateValue(date = new Date()) {
@@ -39,6 +39,167 @@ function formatSummaryHours(row) {
     : Number((Number(row.total_minutes || 0) / 60).toFixed(2));
   return hours.toFixed(2);
 }
+
+async function promptForStaffPin({ title, subtitle }) {
+  console.log('promptForStaffPin called with:', {title, subtitle});
+  return new Promise((resolve, reject) => {
+    const modalHtml = `
+      <div class="orma-modal-backdrop" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;"></div>
+      <div class="orma-modal" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;z-index:1001;max-width:90%;width:300px;box-sizing:border-box;">
+        <div class="orma-modal-header">
+          <h3>${escapeHtml(title)}</h3>
+          <p class="subtitle">${escapeHtml(subtitle)}</p>
+        </div>
+        <div class="orma-modal-body">
+          <form id="staff-pin-form">
+            <div class="field-group">
+              <label for="staff-nombre">Nombre</label>
+              <input type="text" id="staff-nombre" required style="width:100%;padding:8px;margin:8px 0;box-sizing:border-box;">
+            </div>
+            <div class="field-group">
+              <label for="staff-pin">PIN</label>
+              <input type="password" id="staff-pin" inputmode="numeric" maxlength="10" required style="width:100%;padding:8px;margin:8px 0;box-sizing:border-box;">
+            </div>
+            <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:15px;">
+              <button type="button" id="staff-pin-cancel" style="padding:8px 16px;">Cancelar</button>
+              <button type="submit" id="staff-pin-ok" style="padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;">OK</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+
+    const appDiv = document.getElementById('app');
+    appDiv.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modal = appDiv.lastChild;
+    const form = modal.querySelector('#staff-pin-form');
+    const cancelBtn = modal.querySelector('#staff-pin-cancel');
+    const okBtn = modal.querySelector('#staff-pin-ok');
+
+    const cleanup = () => {
+      modal.remove();
+      form.removeEventListener('submit', onSubmit);
+      cancelBtn.removeEventListener('click', onCancel);
+      okBtn.removeEventListener('click', onOk);
+    };
+
+    const onSubmit = (e) => {
+      e.preventDefault();
+      const nombre = document.getElementById('staff-nombre').value.trim();
+      const pin = document.getElementById('staff-pin').value;
+      console.log('promptForStaffPin result:', {nombre, pinLength: pin.length});
+      if (nombre && pin) {
+        resolve({ nombre, pin });
+      } else {
+        // Show error? For now, we'll just reject if empty.
+        reject(new Error('Nombre y PIN son requeridos'));
+      }
+      cleanup();
+    };
+
+    const onCancel = () => {
+      console.log('promptForStaffPin cancelled');
+      reject(new Error('Cancelled'));
+      cleanup();
+    };
+
+    const onOk = () => {
+      form.dispatchEvent(new Event('submit'));
+    };
+
+    form.addEventListener('submit', onSubmit);
+    cancelBtn.addEventListener('click', onCancel);
+    okBtn.addEventListener('click', onOk);
+
+    // Focus the first input
+    document.getElementById('staff-nombre').focus();
+  });
+}
+
+async function mainMenu() {
+  app.innerHTML = pageHead(
+    'Orama POS',
+    'Menú Principal',
+    'Seleccione una opción para comenzar',
+    '/images/cafe-ambiance.jpg'
+  ) + `
+    <section class="menu-grid">
+      <button class="menu-button" data-feature="dashboard">
+        <div class="menu-icon">📊</div>
+        <div class="menu-text">
+          <h3>Control de Hoy</h3>
+          <p>Resumen diario de ventas e inventario</p>
+        </div>
+      </button>
+      <button class="menu-button" data-feature="mesas">
+        <div class="menu-icon">🪑</div>
+        <div class="menu-text">
+          <h3>Gestión de Mesas</h3>
+          <p>Estado en tiempo real de las mesas</p>
+        </div>
+      </button>
+      <button class="menu-button" data-feature="ordenes">
+        <div class="menu-icon">📋</div>
+        <div class="menu-text">
+          <h3>Órdenes</h3>
+          <p>Seguimiento de ventas y cobros</p>
+        </div>
+      </button>
+      <button class="menu-button" data-feature="staff">
+        <div class="menu-icon">𑑂</div>
+        <div class="menu-text">
+          <h3>Staff</h3>
+          <p>Control de asistencia y personal</p>
+        </div>
+      </button>
+      <button class="menu-button" data-feature="nomina">
+        <div class="menu-icon">💰</div>
+        <div class="menu-text">
+          <h3>Nómina</h3>
+          <p>Gestión de tiempo y pagos</p>
+        </div>
+      </button>
+      <button class="menu-button" data-feature="pricing">
+        <div class="menu-icon">🧮</div>
+        <div class="menu-text">
+          <h3>Calculadora de Precios</h3>
+          <p>Análisis de costos y márgenes</p>
+        </div>
+      </button>
+    </section>
+  `;
+
+  // Add event listeners for feature selection
+  document.querySelectorAll('.menu-button[data-feature]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const feature = button.dataset.feature;
+      // Disable button during transition
+      button.disabled = true;
+      button.innerHTML = '<div class="menu-icon">⏳</div><div class="menu-text"><p>Cargando...</p></div>';
+
+      try {
+        // Call the selected feature function
+        if (typeof Orama.routes[feature] === 'function') {
+          await Orama.routes[feature]();
+        } else {
+          throw new Error(`Feature ${feature} not implemented`);
+        }
+      } catch (error) {
+        Orama.toast(`Error al cargar ${feature}: ${error.message}`, 'error');
+        console.error(error);
+        // Return to main menu on error
+        await mainMenu();
+      } finally {
+        // Re-enable button after attempt
+        button.disabled = false;
+      }
+    });
+  });
+}
+
+// Initialize the application when the DOM is loaded
+document.addEventListener('DOMContentLoaded', mainMenu);
 
 async function dashboard() {
   const [ordersData, inventoryData] = await Promise.all([
@@ -146,42 +307,41 @@ async function staff() {
           </div>
           <div id="staff-live-content" aria-live="polite"></div>
         </section>
-      </section>
 
-      <section class="panel staff-summary-panel" aria-labelledby="staff-summary-title">
-        <div class="panel-head">
-          <div>
-            <h2 id="staff-summary-title">Resumen de horas</h2>
-            <p class="subtle">Preparado para futura exportación a CSV, Sheets o Excel.</p>
+        <section class="panel staff-summary-panel" aria-labelledby="staff-summary-title">
+          <div class="panel-head">
+            <div>
+              <h2 id="staff-summary-title">Resumen de horas</h2>
+              <p class="subtle">Preparado para futura exportación a CSV, Sheets o Excel.</p>
+            </div>
           </div>
-        </div>
-        <div class="staff-summary-toolbar">
-          <div class="field-group">
-            <label for="staff-summary-from">Desde</label>
-            <input id="staff-summary-from" class="search" type="date" value="${range.from}">
+          <div class="staff-summary-toolbar">
+            <div class="field-group">
+              <label for="staff-summary-from">Desde</label>
+              <input id="staff-summary-from" class="search" type="date" value="${range.from}">
+            </div>
+            <div class="field-group">
+              <label for="staff-summary-to">Hasta</label>
+              <input id="staff-summary-to" class="search" type="date" value="${range.to}">
+            </div>
+            <div class="staff-attendance-actions">
+              <button type="button" class="button" data-staff-summary-apply>Ver resumen</button>
+              <button type="button" class="button" data-staff-summary-today>Hoy</button>
+            </div>
           </div>
-          <div class="field-group">
-            <label for="staff-summary-to">Hasta</label>
-            <input id="staff-summary-to" class="search" type="date" value="${range.to}">
-          </div>
-          <div class="staff-attendance-actions">
-            <button type="button" class="button" data-staff-summary-apply>Ver resumen</button>
-            <button type="button" class="button" data-staff-summary-today>Hoy</button>
-          </div>
-        </div>
-        <div id="staff-summary-content" aria-live="polite"></div>
-      </section>
+          <div id="staff-summary-content" aria-live="polite"></div>
+        </section>
 
-      <section class="panel staff-table-panel" aria-labelledby="staff-table-title">
-        <div class="panel-head">
-          <div>
-            <h2 id="staff-table-title">Staff registrado</h2>
-            <p class="subtle">La administración actual se conserva sin cambios de comportamiento.</p>
+        <section class="panel staff-table-panel" aria-labelledby="staff-table-title">
+          <div class="panel-head">
+            <div>
+              <h2 id="staff-table-title">Staff registrado</h2>
+              <p class="subtle">La administración actual se conserva sin cambios de comportamiento.</p>
+            </div>
+            <span class="subtle">${members.length} integrante(s)</span>
           </div>
-          <span class="subtle">${members.length} integrante(s)</span>
-        </div>
-        ${staffTableMarkup(members)}
-      </section>`;
+          ${staffTableMarkup(members)}
+        </section>`;
   }
 
   function syncFeedback() {
@@ -214,7 +374,7 @@ async function staff() {
     }
     container.innerHTML = `
       ${clockedInError ? `<div class="error" role="alert">${escapeHtml(clockedInError)}</div>` : ''}
-      ${clockedIn.length ? `<div class="staff-live-list">${clockedIn.map((member) => `<article class="staff-live-item"><div class="staff-live-top"><div><p class="staff-live-name">${escapeHtml(member.nombre)}</p><p class="staff-live-meta">Entrada: ${escapeHtml(formatClockDateTime(member.session?.login_time))}</p></div><span class="badge-estado live">En turno</span></div><div class="staff-live-bottom"><p class="staff-live-meta">Tiempo transcurrido</p><p class="staff-live-duration mono" data-elapsed-start="${escapeHtml(member.session?.login_time || '')}">${escapeHtml(formatElapsedDuration(member.session?.login_time))}</p>${member.session?.screen ? `<p class="staff-live-meta">Contexto: <span class="staff-screen-chip">${escapeHtml(member.session.screen)}</span></p>` : ''}</div></article>`).join('')}</div>` : '<div class="empty">Nadie ha registrado entrada en este momento.</div>'}`;
+      ${clockedIn.length ? `<div class="staff-live-list">${clockedIn.map((member) => `<article class="staff-live-item"><div class="staff-live-top"><div><p class="staff-live-name">${escapeHtml(member.nombre)}</p><p class="staff-live-meta">Entrada: ${escapeHtml(formatClockDateTime(member.session?.login_time))}</p></div><span class="badge-estado live">En turno</span></div><div class="staff-live-bottom"><p class="staff-live-meta">Tiempo transcurrido</p><p class="staff-live-duration mono" data-elapsed-start="${escapeHtml(member.session?.login_time || '')}">${escapeHtml(formatElapsedDuration(member.session?.login_time))}</p>${member.session?.screen ? `<p class="staff-live-meta">Contexto: <span class="staff-screen-chip">${escapeHtml(member.session.screen)}</span></p>` : ''}</div></article>`).join('')}</div>` : '<div class="empty">Nadie ha registrado entrada en este momento.</div>`;
   }
 
   function renderSummary() {
@@ -417,10 +577,7 @@ async function staff() {
 
 async function nomina() {
   // Check if user is management via PIN
-  const { nombre, pin } = await Orama.prompt([
-    { label: 'Nombre', name: 'nombre' },
-    { label: 'PIN', name: 'pin', type: 'password' }
-  ], { title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
+  const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
 
   if (!nombre || !pin) {
     Orama.toast('Acceso denegado', 'error');
@@ -806,10 +963,14 @@ async function nomina() {
 
 async function pricing() {
   // Check if user is management via PIN
+<<<<<<< HEAD
   const { nombre, pin } = await Orama.prompt([
     { label: 'Nombre', name: 'nombre' },
     { label: 'PIN', name: 'pin', type: 'password' }
   ], { title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
+=======
+  const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
+>>>>>>> be78fa8 (fix: remove duplicate routes and fix typo in staff routes)
 
   if (!nombre || !pin) {
     Orama.toast('Acceso denegado', 'error');
@@ -1054,7 +1215,7 @@ function showResults(result) {
   }
 
   const isBelowTargetClass = result.isBelowTarget ? 'alert' : 'success';
-  
+
   resultsDiv.innerHTML = `
     <h3>Resultados del Cálculo</h3>
     <div class="results-grid">
@@ -1091,7 +1252,7 @@ function showResults(result) {
         <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}$${result.savingsOrShortfall.toFixed(2)} MXN</p>
       </div>
     </div>
-    
+
     <div class="form-section">
       <button class="button secondary" onclick="saveAsRecipe()">Guardar como receta</button>
     </div>
@@ -1121,11 +1282,11 @@ async function saveAsRecipe() {
       const nameInput = row.querySelector('.ingredient-name');
       const quantityInput = row.querySelector('.quantity');
       const unitInput = row.querySelector('.unit');
-      
+
       const name = nameInput.value.trim();
       const quantity = parseFloat(quantityInput.value) || 0;
       const unit = unitInput.value.trim() || 'pieza';
-      
+
       if (name && quantity > 0) {
         ingredients.push({ name, quantity, unit });
       }
@@ -1192,6 +1353,8 @@ Orama.routes.staff = staff;
 Orama.routes.nomina = nomina;
 Orama.routes.pricing = pricing;
 
+Orama.routes.pricing = pricing;
+
 document.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-action]');
   if (!button || button.disabled) return;
@@ -1219,7 +1382,7 @@ document.addEventListener('click', async (event) => {
     } else if (action === 'cancel') {
       await api(`/api/ordenes/${id}/cancelar`, { method: 'PUT' });
     }
-    await render();
+    await window.render();
   } catch (error) {
     app.innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
   }
