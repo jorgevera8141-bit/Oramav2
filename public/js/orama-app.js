@@ -516,7 +516,7 @@ async function nomina() {
     const staffList = staffResponse.staff || [];
 
     // Get weekly payroll data
-    const payrollResponse = await api('/api/payroll/weekly');
+    const payrollResponse = await api('/api/staff/payroll/weekly');
     const payrollData = payrollResponse.payroll || [];
 
     app.innerHTML += `

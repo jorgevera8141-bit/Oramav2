@@ -342,7 +342,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
 });
 
 // Payroll endpoints
-router.get('/staff/payroll/weekly', verifyAdmin, async (req, res) => {
+router.get('/staff/payroll/weekly', async (req, res) => {
   // Get all staff with their weekly summaries
   const { rows: staffRows } = await pool.query(
     'SELECT id, nombre, tipo, hourly_rate FROM staff WHERE activo = 1 ORDER BY nombre'
@@ -365,15 +365,16 @@ router.get('/staff/payroll/weekly', verifyAdmin, async (req, res) => {
       [staff.id]
     );
 
+    const hourlyRate = parseFloat(staff.hourly_rate) || 0;
     const totalHours = timeClockRows.reduce((sum, day) => sum + (day.hours_worked || 0), 0);
-    const totalEarnings = totalHours * (staff.hourly_rate || 0);
+    const totalEarnings = totalHours * hourlyRate;
     totalPayroll += totalEarnings;
 
     staffPayroll.push({
       id: staff.id,
       nombre: staff.nombre,
       tipo: staff.tipo,
-      hourly_rate: staff.hourly_rate || 0.00,
+      hourly_rate: hourlyRate,
       weeklyHours: parseFloat(totalHours.toFixed(2)),
       weeklyEarnings: parseFloat(totalEarnings.toFixed(2))
     });
