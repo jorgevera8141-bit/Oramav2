@@ -26,7 +26,7 @@ async function getAllProducts() {
  */
 async function getInventoryItemById(inventoryItemId) {
   const { rows } = await pool.query(
-    'SELECT id, name, unit, unit_cost, current_stock FROM inventory_items WHERE id = $1',
+    'SELECT id, name, unit, cost_per_unit AS unit_cost, current_stock FROM inventory_items WHERE id = $1',
     [inventoryItemId]
   );
   return rows[0];
@@ -37,7 +37,7 @@ async function getInventoryItemById(inventoryItemId) {
  */
 async function searchInventoryItems(searchTerm) {
   const { rows } = await pool.query(
-    'SELECT id, name, unit, unit_cost, current_stock FROM inventory_items WHERE name ILIKE $1 ORDER BY name',
+    'SELECT id, name, unit, cost_per_unit AS unit_cost, current_stock FROM inventory_items WHERE name ILIKE $1 ORDER BY name',
     [`%${searchTerm}%`]
   );
   return rows;
@@ -109,7 +109,7 @@ async function saveRecipe(recipeData) {
  */
 async function getCurrentRecipe(menuItemId) {
   const { rows } = await pool.query(
-    `SELECT ri.inventory_item_id, ri.quantity_used, ii.name, ii.unit, ii.unit_cost
+    `SELECT ri.inventory_item_id, ri.quantity_used, ii.name, ii.unit, ii.cost_per_unit AS unit_cost
      FROM recipe_items ri
      JOIN inventory_items ii ON ri.inventory_item_id = ii.id
      WHERE ri.menu_item_id = $1`,

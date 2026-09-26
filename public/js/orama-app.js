@@ -1064,8 +1064,8 @@ async function calculatePrice() {
         quantityInput.style.borderColor = '';
       }
 
-      if (!ingredients.some(ing => ing.name === name && ing.unit === unit)) {
-        ingredients.push({ name, quantity, unit, unitCost });
+      if (!ingredients.some(ing => ing.ingredientName === name && ing.unit === unit)) {
+        ingredients.push({ ingredientName: name, quantityPerServing: quantity, unit, unitCost });
       }
     });
 
