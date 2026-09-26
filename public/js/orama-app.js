@@ -982,14 +982,7 @@ async function nomina() {
 
 async function pricing() {
   // Check if user is management via PIN
-<<<<<<< HEAD
-  const { nombre, pin } = await Orama.prompt([
-    { label: 'Nombre', name: 'nombre' },
-    { label: 'PIN', name: 'pin', type: 'password' }
-  ], { title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
-=======
   const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
->>>>>>> be78fa8 (fix: remove duplicate routes and fix typo in staff routes)
 
   if (!nombre || !pin) {
     Orama.toast('Acceso denegado', 'error');
