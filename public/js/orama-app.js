@@ -372,9 +372,28 @@ async function staff() {
       container.innerHTML = `<div class="error" role="alert">${escapeHtml(clockedInError)}</div>`;
       return;
     }
+    const clockedInList = clockedIn.length
+      ? `<div class="staff-live-list">${clockedIn.map(member => `
+          <article class="staff-live-item">
+            <div class="staff-live-top">
+              <div>
+                <p class="staff-live-name">${escapeHtml(member.nombre)}</p>
+                <p class="staff-live-meta">Entrada: ${escapeHtml(formatClockDateTime(member.session?.login_time))}</p>
+              </div>
+              <span class="badge-estado live">En turno</span>
+            </div>
+            <div class="staff-live-bottom">
+              <p class="staff-live-meta">Tiempo transcurrido</p>
+              <p class="staff-live-duration mono" data-elapsed-start="${escapeHtml(member.session?.login_time || '')}">${escapeHtml(formatElapsedDuration(member.session?.login_time))}</p>
+              ${member.session?.screen ? `<p class="staff-live-meta">Contexto: <span class="staff-screen-chip">${escapeHtml(member.session.screen)}</span></p>` : ''}
+            </div>
+          </article>
+        `).join('')}</div>`
+      : '<div class="empty">Nadie ha registrado entrada en este momento.</div>';
     container.innerHTML = `
       ${clockedInError ? `<div class="error" role="alert">${escapeHtml(clockedInError)}</div>` : ''}
-      ${clockedIn.length ? `<div class="staff-live-list">${clockedIn.map((member) => `<article class="staff-live-item"><div class="staff-live-top"><div><p class="staff-live-name">${escapeHtml(member.nombre)}</p><p class="staff-live-meta">Entrada: ${escapeHtml(formatClockDateTime(member.session?.login_time))}</p></div><span class="badge-estado live">En turno</span></div><div class="staff-live-bottom"><p class="staff-live-meta">Tiempo transcurrido</p><p class="staff-live-duration mono" data-elapsed-start="${escapeHtml(member.session?.login_time || '')}">${escapeHtml(formatElapsedDuration(member.session?.login_time))}</p>${member.session?.screen ? `<p class="staff-live-meta">Contexto: <span class="staff-screen-chip">${escapeHtml(member.session.screen)}</span></p>` : ''}</div></article>`).join('')}</div>` : '<div class="empty">Nadie ha registrado entrada en este momento.</div>`;
+      ${clockedInList}
+    `;
   }
 
   function renderSummary() {
