@@ -41,165 +41,61 @@ function formatSummaryHours(row) {
 }
 
 async function promptForStaffPin({ title, subtitle }) {
-  console.log('promptForStaffPin called with:', {title, subtitle});
   return new Promise((resolve, reject) => {
-    const modalHtml = `
-      <div class="orma-modal-backdrop" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;"></div>
-      <div class="orma-modal" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;z-index:1001;max-width:90%;width:300px;box-sizing:border-box;">
-        <div class="orma-modal-header">
-          <h3>${escapeHtml(title)}</h3>
-          <p class="subtitle">${escapeHtml(subtitle)}</p>
-        </div>
-        <div class="orma-modal-body">
-          <form id="staff-pin-form">
-            <div class="field-group">
-              <label for="staff-nombre">Nombre</label>
-              <input type="text" id="staff-nombre" required style="width:100%;padding:8px;margin:8px 0;box-sizing:border-box;">
-            </div>
-            <div class="field-group">
-              <label for="staff-pin">PIN</label>
-              <input type="password" id="staff-pin" inputmode="numeric" maxlength="10" required style="width:100%;padding:8px;margin:8px 0;box-sizing:border-box;">
-            </div>
-            <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:15px;">
-              <button type="button" id="staff-pin-cancel" style="padding:8px 16px;">Cancelar</button>
-              <button type="submit" id="staff-pin-ok" style="padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;">OK</button>
-            </div>
-          </form>
-        </div>
+    const overlay = document.createElement('div');
+    overlay.className = 'orama-overlay';
+    overlay.innerHTML = `
+      <div class="orama-modal" role="none" aria-modal="true">
+        <p class="orama-modal-message">${escapeHtml(title)}<br><span class="subtle">${escapeHtml(subtitle)}</span></p>
+        <form id="staff-pin-form">
+          <div class="field-group">
+            <label for="staff-nombre">Nombre</label>
+            <input type="text" id="staff-nombre" class="search" required>
+          </div>
+          <div class="field-group">
+            <label for="staff-pin">PIN</label>
+            <input type="password" id="staff-pin" class="search" inputmode="numeric" maxlength="10" required>
+          </div>
+          <div class="orama-modal-actions">
+            <button type="button" class="button" id="staff-pin-cancel">Cancelar</button>
+            <button type="submit" class="button" id="staff-pin-ok">OK</button>
+          </div>
+        </form>
       </div>
     `;
+    document.body.appendChild(overlay);
 
-    const appDiv = document.getElementById('app');
-    appDiv.insertAdjacentHTML('beforeend', modalHtml);
+    const form = overlay.querySelector('#staff-pin-form');
+    const cancelBtn = overlay.querySelector('#staff-pin-cancel');
+    const nombreInput = overlay.querySelector('#staff-nombre');
+    const pinInput = overlay.querySelector('#staff-pin');
 
-    const modal = appDiv.lastChild;
-    const form = modal.querySelector('#staff-pin-form');
-    const cancelBtn = modal.querySelector('#staff-pin-cancel');
-    const okBtn = modal.querySelector('#staff-pin-ok');
-
-    const cleanup = () => {
-      modal.remove();
-      form.removeEventListener('submit', onSubmit);
-      cancelBtn.removeEventListener('click', onCancel);
-      okBtn.removeEventListener('click', onOk);
-    };
+    const cleanup = () => { overlay.remove(); };
 
     const onSubmit = (e) => {
       e.preventDefault();
-      const nombre = document.getElementById('staff-nombre').value.trim();
-      const pin = document.getElementById('staff-pin').value;
-      console.log('promptForStaffPin result:', {nombre, pinLength: pin.length});
+      const nombre = nombreInput.value.trim();
+      const pin = pinInput.value;
+      cleanup();
       if (nombre && pin) {
         resolve({ nombre, pin });
       } else {
-        // Show error? For now, we'll just reject if empty.
         reject(new Error('Nombre y PIN son requeridos'));
       }
-      cleanup();
     };
 
     const onCancel = () => {
-      console.log('promptForStaffPin cancelled');
-      reject(new Error('Cancelled'));
       cleanup();
-    };
-
-    const onOk = () => {
-      form.dispatchEvent(new Event('submit'));
+      reject(new Error('Cancelled'));
     };
 
     form.addEventListener('submit', onSubmit);
     cancelBtn.addEventListener('click', onCancel);
-    okBtn.addEventListener('click', onOk);
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) onCancel(); });
 
-    // Focus the first input
-    document.getElementById('staff-nombre').focus();
+    nombreInput.focus();
   });
 }
-
-async function mainMenu() {
-  app.innerHTML = pageHead(
-    'Orama POS',
-    'Menú Principal',
-    'Seleccione una opción para comenzar',
-    '/images/cafe-ambiance.jpg'
-  ) + `
-    <section class="menu-grid">
-      <button class="menu-button" data-feature="dashboard">
-        <div class="menu-icon">📊</div>
-        <div class="menu-text">
-          <h3>Control de Hoy</h3>
-          <p>Resumen diario de ventas e inventario</p>
-        </div>
-      </button>
-      <button class="menu-button" data-feature="mesas">
-        <div class="menu-icon">🪑</div>
-        <div class="menu-text">
-          <h3>Gestión de Mesas</h3>
-          <p>Estado en tiempo real de las mesas</p>
-        </div>
-      </button>
-      <button class="menu-button" data-feature="ordenes">
-        <div class="menu-icon">📋</div>
-        <div class="menu-text">
-          <h3>Órdenes</h3>
-          <p>Seguimiento de ventas y cobros</p>
-        </div>
-      </button>
-      <button class="menu-button" data-feature="staff">
-        <div class="menu-icon">𑑂</div>
-        <div class="menu-text">
-          <h3>Staff</h3>
-          <p>Control de asistencia y personal</p>
-        </div>
-      </button>
-      <button class="menu-button" data-feature="nomina">
-        <div class="menu-icon">💰</div>
-        <div class="menu-text">
-          <h3>Nómina</h3>
-          <p>Gestión de tiempo y pagos</p>
-        </div>
-      </button>
-      <button class="menu-button" data-feature="pricing">
-        <div class="menu-icon">🧮</div>
-        <div class="menu-text">
-          <h3>Calculadora de Precios</h3>
-          <p>Análisis de costos y márgenes</p>
-        </div>
-      </button>
-    </section>
-  `;
-
-  // Add event listeners for feature selection
-  document.querySelectorAll('.menu-button[data-feature]').forEach(button => {
-    button.addEventListener('click', async () => {
-      const feature = button.dataset.feature;
-      // Disable button during transition
-      button.disabled = true;
-      button.innerHTML = '<div class="menu-icon">⏳</div><div class="menu-text"><p>Cargando...</p></div>';
-
-      try {
-        // Call the selected feature function
-        if (typeof Orama.routes[feature] === 'function') {
-          await Orama.routes[feature]();
-        } else {
-          throw new Error(`Feature ${feature} not implemented`);
-        }
-      } catch (error) {
-        Orama.toast(`Error al cargar ${feature}: ${error.message}`, 'error');
-        console.error(error);
-        // Return to main menu on error
-        await mainMenu();
-      } finally {
-        // Re-enable button after attempt
-        button.disabled = false;
-      }
-    });
-  });
-}
-
-// Initialize the application when the DOM is loaded
-document.addEventListener('DOMContentLoaded', mainMenu);
 
 async function dashboard() {
   const [ordersData, inventoryData] = await Promise.all([
@@ -1357,15 +1253,12 @@ window.removeIngredient = removeIngredient;
 window.calculatePrice = calculatePrice;
 window.saveAsRecipe = saveAsRecipe;
 window.loadSavedRecipes = loadSavedRecipes;
-window.render = mainMenu;
 
 Orama.routes.dashboard = dashboard;
 Orama.routes.mesas = mesas;
 Orama.routes.ordenes = orders;
 Orama.routes.staff = staff;
 Orama.routes.nomina = nomina;
-Orama.routes.pricing = pricing;
-
 Orama.routes.pricing = pricing;
 
 document.addEventListener('click', async (event) => {
