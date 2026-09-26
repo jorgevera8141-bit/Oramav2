@@ -1345,6 +1345,7 @@ window.removeIngredient = removeIngredient;
 window.calculatePrice = calculatePrice;
 window.saveAsRecipe = saveAsRecipe;
 window.loadSavedRecipes = loadSavedRecipes;
+window.render = mainMenu;
 
 Orama.routes.dashboard = dashboard;
 Orama.routes.mesas = mesas;
