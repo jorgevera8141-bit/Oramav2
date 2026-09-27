@@ -944,6 +944,31 @@ async function pricing() {
             </div>
           </div>
           <div class="form-section">
+            <label>Costos fijos mensuales (para el precio de costo completo):</label>
+            <div class="cost-grid">
+              <div>
+                <label>Renta (MXN):</label>
+                <input type="number" id="fixedRent" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>Teléfono/Internet (MXN):</label>
+                <input type="number" id="fixedPhone" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>Nómina fija (MXN):</label>
+                <input type="number" id="fixedPayroll" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>Otros fijos (MXN):</label>
+                <input type="number" id="fixedOther" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>Unidades vendidas al mes (estimado):</label>
+                <input type="number" id="estimatedMonthlyUnits" step="1" min="0" value="0">
+              </div>
+            </div>
+          </div>
+          <div class="form-section">
             <label>Margen objetivo (%):</label>
             <input type="number" id="targetMargin" step="0.1" min="0" max="1000" value="30">
           </div>
@@ -989,6 +1014,12 @@ async function pricing() {
       addIngredientField();
     }
 
+    // Remember monthly fixed costs between visits (rent/phone/payroll rarely change)
+    restoreFixedCostInputs();
+    ['fixedRent', 'fixedPhone', 'fixedPayroll', 'fixedOther', 'estimatedMonthlyUnits'].forEach((id) => {
+      document.getElementById(id).addEventListener('change', saveFixedCostInputs);
+    });
+
   } catch (error) {
     Orama.toast('Error al acceder a la calculadora: ' + error.message, 'error');
     console.error(error);
@@ -996,6 +1027,34 @@ async function pricing() {
 }
 
 // Helper functions for the pricing interface
+const FIXED_COST_STORAGE_KEY = 'orama-pricing-fixed-costs';
+
+function saveFixedCostInputs() {
+  try {
+    localStorage.setItem(FIXED_COST_STORAGE_KEY, JSON.stringify({
+      fixedRent: document.getElementById('fixedRent').value,
+      fixedPhone: document.getElementById('fixedPhone').value,
+      fixedPayroll: document.getElementById('fixedPayroll').value,
+      fixedOther: document.getElementById('fixedOther').value,
+      estimatedMonthlyUnits: document.getElementById('estimatedMonthlyUnits').value
+    }));
+  } catch (error) {
+    // localStorage unavailable (private mode, etc.) - not critical
+  }
+}
+
+function restoreFixedCostInputs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FIXED_COST_STORAGE_KEY) || '{}');
+    Object.keys(saved).forEach((id) => {
+      const input = document.getElementById(id);
+      if (input && saved[id] !== undefined) input.value = saved[id];
+    });
+  } catch (error) {
+    // Ignore corrupted/missing stored values
+  }
+}
+
 function addIngredientField() {
   const container = document.getElementById('ingredientsContainer');
   const row = document.createElement('div');
@@ -1080,6 +1139,16 @@ async function calculatePrice() {
       other: parseFloat(document.getElementById('extraOther').value) || 0
     };
 
+    const fixedCosts = {
+      rent: parseFloat(document.getElementById('fixedRent').value) || 0,
+      phoneInternet: parseFloat(document.getElementById('fixedPhone').value) || 0,
+      payroll: parseFloat(document.getElementById('fixedPayroll').value) || 0,
+      other: parseFloat(document.getElementById('fixedOther').value) || 0
+    };
+    const estimatedMonthlyUnits = parseFloat(document.getElementById('estimatedMonthlyUnits').value) || 0;
+
+    saveFixedCostInputs();
+
     // Call API to calculate price
     const response = await api('/api/pricing/calculate', {
       method: 'POST',
@@ -1089,6 +1158,8 @@ async function calculatePrice() {
         productName: productName || undefined,
         ingredients,
         extraCosts,
+        fixedCosts,
+        estimatedMonthlyUnits: estimatedMonthlyUnits > 0 ? estimatedMonthlyUnits : undefined,
         targetMargin,
         includeIVA
       })
@@ -1160,6 +1231,32 @@ function showResults(result) {
         <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}$${result.savingsOrShortfall.toFixed(2)} MXN</p>
       </div>
     </div>
+
+    ${result.fullCostSellingPrice !== null && result.fullCostSellingPrice !== undefined ? `
+      <h3 class="mt-4">Precio de costo completo (incluye renta, teléfono y nómina fija)</h3>
+      <p class="subtle">Costos fijos mensuales: $${result.totalMonthlyFixedCosts.toFixed(2)} MXN ÷ ${result.estimatedMonthlyUnits} unidades/mes = $${result.fixedCostPerUnit.toFixed(2)} MXN de costo fijo por unidad</p>
+      <div class="results-grid">
+        <div>
+          <label>Costo completo por porción:</label>
+          <p class="price-label">$${result.fullCostPerServing.toFixed(2)} MXN</p>
+        </div>
+        <div>
+          <label>Precio sugerido (costo completo):</label>
+          <p class="price-label">$${result.fullCostSellingPrice.toFixed(2)} MXN</p>
+        </div>
+        <div>
+          <label>Precio con IVA (costo completo):</label>
+          <p class="price-label">$${result.fullCostPriceWithIVA.toFixed(2)} MXN</p>
+        </div>
+        <div>
+          <label>Punto de equilibrio:</label>
+          <p class="price-label">${result.breakEvenUnits !== null ? `${result.breakEvenUnits} unidades/mes` : 'N/A'}</p>
+        </div>
+      </div>
+      <p class="subtle">A este precio, este producto cubre ingredientes, costos extra y su parte de renta/teléfono/nómina fija. El "precio de venta sugerido" de arriba solo cubre el costo de los ingredientes.</p>
+    ` : `
+      <p class="empty mt-4">Agrega renta, teléfono, nómina fija y las unidades estimadas por mes arriba para ver el precio que cubre también los costos fijos del negocio, no solo los ingredientes.</p>
+    `}
 
     <div class="form-section">
       <button class="button secondary" onclick="saveAsRecipe()">Guardar como receta</button>

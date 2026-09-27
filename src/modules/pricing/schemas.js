@@ -22,12 +22,23 @@ const extraCostsSchema = z.object({
   other: z.number().nonnegative().default(0)
 });
 
+// Monthly fixed/overhead costs (rent, phone, salaried payroll, etc.) - used to
+// spread overhead across estimated monthly volume for full-cost pricing
+const fixedCostsSchema = z.object({
+  rent: z.number().nonnegative().default(0),
+  phoneInternet: z.number().nonnegative().default(0),
+  payroll: z.number().nonnegative().default(0),
+  other: z.number().nonnegative().default(0)
+});
+
 // Price calculation input schema
 const priceCalculationSchema = z.object({
   productId: z.number().int().positive().optional(),
   productName: z.string().optional(), // For new products
   ingredients: z.array(ingredientLineSchema),
   extraCosts: extraCostsSchema,
+  fixedCosts: fixedCostsSchema.default({}),
+  estimatedMonthlyUnits: z.number().positive().optional(), // omit to skip full-cost pricing
   targetMargin: z.number().nonnegative().max(1000).default(30), // percent
   includeIVA: z.boolean().default(true)
 });
@@ -42,7 +53,14 @@ const priceCalculationResultSchema = z.object({
   priceWithIVA: z.number().nonnegative(),
   priceWithoutIVA: z.number().nonnegative(),
   isBelowTarget: z.boolean(),
-  savingsOrShortfall: z.number()
+  savingsOrShortfall: z.number(),
+  totalMonthlyFixedCosts: z.number().nonnegative(),
+  estimatedMonthlyUnits: z.number().positive().nullable(),
+  fixedCostPerUnit: z.number().nonnegative().nullable(),
+  fullCostPerServing: z.number().nonnegative().nullable(),
+  fullCostSellingPrice: z.number().nonnegative().nullable(),
+  fullCostPriceWithIVA: z.number().nonnegative().nullable(),
+  breakEvenUnits: z.number().int().nonnegative().nullable()
 });
 
 // Recipe save schema
