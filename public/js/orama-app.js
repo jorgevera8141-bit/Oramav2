@@ -40,8 +40,11 @@ function formatSummaryHours(row) {
   return hours.toFixed(2);
 }
 
+// Resolves null on cancel/Escape (never rejects), so callers just check for
+// a falsy result instead of needing a try/catch around the prompt itself —
+// closing the modal without touching anything shouldn't surface as an error.
 async function promptForStaffPin({ title, subtitle }) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
     overlay.innerHTML = `
@@ -54,7 +57,7 @@ async function promptForStaffPin({ title, subtitle }) {
           </div>
           <div class="field-group">
             <label for="staff-pin">PIN</label>
-            <input type="password" id="staff-pin" class="search" inputmode="numeric" maxlength="10" required>
+            <input type="password" id="staff-pin" class="search" inputmode="numeric" maxlength="10" autocomplete="off" required>
           </div>
           <div class="orama-modal-actions">
             <button type="button" class="button" id="staff-pin-cancel">Cancelar</button>
@@ -70,28 +73,16 @@ async function promptForStaffPin({ title, subtitle }) {
     const nombreInput = overlay.querySelector('#staff-nombre');
     const pinInput = overlay.querySelector('#staff-pin');
 
-    const cleanup = () => { overlay.remove(); };
+    const close = (value) => { overlay.remove(); resolve(value); };
 
-    const onSubmit = (e) => {
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
       const nombre = nombreInput.value.trim();
       const pin = pinInput.value;
-      cleanup();
-      if (nombre && pin) {
-        resolve({ nombre, pin });
-      } else {
-        reject(new Error('Nombre y PIN son requeridos'));
-      }
-    };
-
-    const onCancel = () => {
-      cleanup();
-      reject(new Error('Cancelled'));
-    };
-
-    form.addEventListener('submit', onSubmit);
-    cancelBtn.addEventListener('click', onCancel);
-    overlay.addEventListener('click', (event) => { if (event.target === overlay) onCancel(); });
+      close(nombre && pin ? { nombre, pin } : null);
+    });
+    cancelBtn.addEventListener('click', () => close(null));
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) close(null); });
 
     nombreInput.focus();
   });
@@ -492,12 +483,9 @@ async function staff() {
 
 async function nomina() {
   // Check if user is management via PIN
-  const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
-
-  if (!nombre || !pin) {
-    Orama.toast('Acceso denegado', 'error');
-    return;
-  }
+  const auth = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
+  if (!auth) return; // cancelled — no error toast needed
+  const { nombre, pin } = auth;
 
   try {
     // Verify staff is management
@@ -581,8 +569,8 @@ async function nomina() {
           <h3>Resumen Semanal de Nómina</h3>
           ${payrollData.length > 0 ? `
             <div class="payroll-summary">
-              <p><strong>Total nómina semanal:</strong> $${payrollResponse.summary.totalPayroll.toFixed(2)} MXN</p>
-              <p><strong>Promedio por empleado:</strong> $${payrollResponse.summary.averageWeeklyEarnings.toFixed(2)} MXN</p>
+              <p><strong>Total nómina semanal:</strong> ${money.format(payrollResponse.summary.totalPayroll)}</p>
+              <p><strong>Promedio por empleado:</strong> ${money.format(payrollResponse.summary.averageWeeklyEarnings)}</p>
               <p><strong>Empleados activos:</strong> ${payrollResponse.summary.totalStaff}</p>
             </div>
             <table class="payroll-table">
@@ -600,9 +588,9 @@ async function nomina() {
                   <tr>
                     <td><span class="avatar">${escapeHtml(p.nombre).charAt(0).toUpperCase()}</span> ${escapeHtml(p.nombre)}</td>
                     <td>${escapeHtml(p.tipo)}</td>
-                    <td>$${p.hourly_rate.toFixed(2)} MXN</td>
+                    <td>${money.format(p.hourly_rate)}</td>
                     <td>${p.weeklyHours.toFixed(2)} hrs</td>
-                    <td>$${p.weeklyEarnings.toFixed(2)} MXN</td>
+                    <td>${money.format(p.weeklyEarnings)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -812,15 +800,15 @@ async function nomina() {
 
           if (response.success) {
             let resultsHTML = `<h4>Resultado de la distribución:</h4>`;
-            resultsHTML += `<p><strong>Total propinas:</strong> $${response.tipsAmount.toFixed(2)} MXN</p>`;
+            resultsHTML += `<p><strong>Total propinas:</strong> ${money.format(response.tipsAmount)}</p>`;
             resultsHTML += `<p><strong>Método:</strong> ${response.distributionType}</p>`;
-            resultsHTML += `<p><strong>Distribuido:</strong> $${response.summary.totalDistributed.toFixed(2)} MXN</p>`;
+            resultsHTML += `<p><strong>Distribuido:</strong> ${money.format(response.summary.totalDistributed)}</p>`;
             if (response.summary.remainingTips > 0) {
-              resultsHTML += `<p><strong>Restante:</strong> $${response.summary.remainingTips.toFixed(2)} MXN</p>`;
+              resultsHTML += `<p><strong>Restante:</strong> ${money.format(response.summary.remainingTips)}</p>`;
             }
             resultsHTML += `<div class="mt-3"><strong>Distribución por empleado:</strong><ul>`;
             response.distribution.forEach(d => {
-              resultsHTML += `<li><strong>${escapeHtml(d.nombre)}</strong>: $${d.amount.toFixed(2)} MXN`;
+              resultsHTML += `<li><strong>${escapeHtml(d.nombre)}</strong>: ${money.format(d.amount)}`;
               if (d.hoursWorked !== undefined) {
                 resultsHTML += ` (${d.hoursWorked.toFixed(2)} hrs)`;
               }
@@ -993,12 +981,9 @@ async function loadCorregirTab(nombre, pin) {
 
 async function pricing() {
   // Check if user is management via PIN
-  const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
-
-  if (!nombre || !pin) {
-    Orama.toast('Acceso denegado', 'error');
-    return;
-  }
+  const auth = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
+  if (!auth) return; // cancelled — no error toast needed
+  const { nombre, pin } = auth;
 
   try {
     // Verify staff is management
@@ -1236,7 +1221,7 @@ async function calculatePrice() {
   try {
     const btn = document.getElementById('calculatePriceBtn');
     btn.disabled = true;
-    btn.textContent = 'Calculando...';
+    btn.textContent = 'Calculando…';
 
     const productId = document.getElementById('productSelect').value;
     const productName = document.getElementById('newProductName').value.trim();
@@ -1362,19 +1347,19 @@ function showResults(result) {
     <div class="results-grid">
       <div>
         <label>Costo total por porción:</label>
-        <p class="price-label">$${result.totalCostPerServing.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.totalCostPerServing)}</p>
       </div>
       <div>
         <label>Precio de venta sugerido:</label>
-        <p class="price-label">$${result.suggestedSellingPrice.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.suggestedSellingPrice)}</p>
       </div>
       <div>
         <label>Precio con IVA:</label>
-        <p class="price-label">$${result.priceWithIVA.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.priceWithIVA)}</p>
       </div>
       <div>
         <label>Precio sin IVA:</label>
-        <p class="price-label">$${result.priceWithoutIVA.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.priceWithoutIVA)}</p>
       </div>
       <div>
         <label>Margen actual:</label>
@@ -1390,7 +1375,7 @@ function showResults(result) {
       </div>
       <div>
         <label>Diferencia:</label>
-        <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}$${result.savingsOrShortfall.toFixed(2)} MXN</p>
+        <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}${money.format(result.savingsOrShortfall)}</p>
       </div>
     </div>
 
@@ -1399,19 +1384,19 @@ function showResults(result) {
     <div class="results-grid">
       <div>
         <label>Costo de insumos:</label>
-        <p class="price-label">$${result.ingredientsCost.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.ingredientsCost)}</p>
       </div>
       <div>
         <label>Costo de embalaje:</label>
-        <p class="price-label">$${result.packagingCost.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.packagingCost)}</p>
       </div>
       <div>
         <label>Costo de mano de obra:</label>
-        <p class="price-label">$${result.laborCostPerServing.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.laborCostPerServing)}</p>
       </div>
       <div>
         <label>Costo primo total:</label>
-        <p class="price-label">$${result.primeCost.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.primeCost)}</p>
       </div>
       <div class="${result.primeCostPercent > 60 ? 'alert' : 'success'}">
         <label>Costo primo (% del precio de venta):</label>
@@ -1421,19 +1406,19 @@ function showResults(result) {
 
     ${result.fullCostSellingPrice !== null && result.fullCostSellingPrice !== undefined ? `
       <h3 class="mt-4">Precio de costo completo (incluye renta, teléfono y nómina fija)</h3>
-      <p class="subtle">Costos fijos mensuales: $${result.totalMonthlyFixedCosts.toFixed(2)} MXN ÷ ${result.estimatedMonthlyUnits} unidades/mes = $${result.fixedCostPerUnit.toFixed(2)} MXN de costo fijo por unidad</p>
+      <p class="subtle">Costos fijos mensuales: ${money.format(result.totalMonthlyFixedCosts)} ÷ ${result.estimatedMonthlyUnits} unidades/mes = ${money.format(result.fixedCostPerUnit)} de costo fijo por unidad</p>
       <div class="results-grid">
         <div>
           <label>Costo completo por porción:</label>
-          <p class="price-label">$${result.fullCostPerServing.toFixed(2)} MXN</p>
+          <p class="price-label">${money.format(result.fullCostPerServing)}</p>
         </div>
         <div>
           <label>Precio sugerido (costo completo):</label>
-          <p class="price-label">$${result.fullCostSellingPrice.toFixed(2)} MXN</p>
+          <p class="price-label">${money.format(result.fullCostSellingPrice)}</p>
         </div>
         <div>
           <label>Precio con IVA (costo completo):</label>
-          <p class="price-label">$${result.fullCostPriceWithIVA.toFixed(2)} MXN</p>
+          <p class="price-label">${money.format(result.fullCostPriceWithIVA)}</p>
         </div>
         <div>
           <label>Punto de equilibrio:</label>
@@ -1455,7 +1440,7 @@ async function saveAsRecipe() {
   try {
     const btn = document.querySelector('.results-section .button.secondary');
     btn.disabled = true;
-    btn.textContent = 'Guardando...';
+    btn.textContent = 'Guardando…';
 
     const productId = document.getElementById('productSelect').value;
     const productName = document.getElementById('newProductName').value.trim();
@@ -1514,7 +1499,7 @@ async function loadSavedRecipes() {
   try {
     const btn = document.getElementById('loadRecipesBtn');
     btn.disabled = true;
-    btn.textContent = 'Cargando...';
+    btn.textContent = 'Cargando…';
 
     // TODO: Implement loading saved recipes from API
     // For now, show placeholder
