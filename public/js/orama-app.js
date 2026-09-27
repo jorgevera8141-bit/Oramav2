@@ -526,6 +526,7 @@ async function nomina() {
           <button class="tab" data-tab="rates">Tarifas</button>
           <button class="tab" data-tab="payroll">Nómina</button>
           <button class="tab" data-tab="tips">Propinas</button>
+          <button class="tab" data-tab="corregir">Corregir Marcaciones</button>
         </div>
         <div class="tab-content" id="clock-tab">
           <h3>Marcación de Entrada/Salida</h3>
@@ -630,6 +631,26 @@ async function nomina() {
           </div>
           <button class="button primary" id="calculate-tips-btn">Calcular Distribución</button>
           <div id="tips-results" class="mt-4"></div>
+        </div>
+        <div class="tab-content" id="corregir-tab" style="display:none">
+          <h3>Corregir Marcaciones</h3>
+          <p class="subtle">Corrige entradas, salidas o descansos si alguien olvidó marcar o se equivocó. Últimos 7 días.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Empleado</th>
+                  <th>Entrada</th>
+                  <th>Salida</th>
+                  <th>Descanso (min)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="corregir-tbody">
+                <tr><td colspan="5" class="empty">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     `;
@@ -870,8 +891,102 @@ async function nomina() {
     } catch (error) {
       // Ignore errors in initial load
     }
+
+    await loadCorregirTab(nombre, pin);
   } catch (error) {
     Orama.toast('Error al acceder a nómina: ' + error.message, 'error');
+    console.error(error);
+  }
+}
+
+function toDatetimeLocalValue(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function loadCorregirTab(nombre, pin) {
+  const tbody = document.getElementById('corregir-tbody');
+  if (!tbody) return;
+
+  try {
+    const response = await api('/api/staff/time-clock/recent');
+    const entries = response.entries || [];
+
+    if (entries.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No hay marcaciones en los últimos 7 días</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = entries.map(entry => `
+      <tr data-entry-id="${entry.id}">
+        <td>${escapeHtml(entry.nombre)}</td>
+        <td><input type="datetime-local" class="correction-clock-in" value="${toDatetimeLocalValue(entry.clock_in)}"></td>
+        <td><input type="datetime-local" class="correction-clock-out" value="${toDatetimeLocalValue(entry.clock_out)}"></td>
+        <td><input type="number" class="correction-break" min="0" step="1" value="${entry.total_break_minutes || 0}"></td>
+        <td>
+          <button class="button small correction-save-btn" data-entry-id="${entry.id}">Guardar</button>
+          <button class="button small danger correction-delete-btn" data-entry-id="${entry.id}">Eliminar</button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('.correction-save-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('tr');
+        const clockInInput = row.querySelector('.correction-clock-in');
+        const clockOutInput = row.querySelector('.correction-clock-out');
+        const breakInput = row.querySelector('.correction-break');
+
+        if (!clockInInput.value) {
+          Orama.toast('La entrada es requerida', 'error');
+          return;
+        }
+
+        btn.disabled = true;
+        try {
+          await api(`/api/staff/time-clock/${btn.dataset.entryId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clock_in: new Date(clockInInput.value).toISOString(),
+              clock_out: clockOutInput.value ? new Date(clockOutInput.value).toISOString() : null,
+              total_break_minutes: parseInt(breakInput.value, 10) || 0,
+              nombre,
+              pin
+            })
+          });
+          Orama.toast('Marcación corregida', 'success');
+        } catch (error) {
+          Orama.toast('Error al corregir: ' + error.message, 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+
+    tbody.querySelectorAll('.correction-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('¿Eliminar esta marcación? Esta acción no se puede deshacer.')) return;
+        btn.disabled = true;
+        try {
+          await api(`/api/staff/time-clock/${btn.dataset.entryId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombre, pin })
+          });
+          btn.closest('tr').remove();
+          Orama.toast('Marcación eliminada', 'success');
+        } catch (error) {
+          Orama.toast('Error al eliminar: ' + error.message, 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+  } catch (error) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Error al cargar marcaciones</td></tr>';
     console.error(error);
   }
 }

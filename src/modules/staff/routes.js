@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../../config/database');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { validate } = require('../../middleware/validate');
-const { clockPayloadSchema } = require('./schemas');
+const { clockPayloadSchema, timeClockEditSchema } = require('./schemas');
 const staffService = require('./service');
 
 const router = express.Router();
@@ -206,6 +206,53 @@ router.post('/staff/time-clock/break-end', verifyAdmin, async (req, res) => {
     breakDurationMinutes,
     message: 'Break ended'
   });
+});
+
+// List recent time_clock entries across all staff, for manual correction
+// (someone forgot to clock out, wrong time, double-clicked, etc.)
+router.get('/staff/time-clock/recent', async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT tc.id, tc.staff_id, s.nombre, tc.clock_in, tc.clock_out, tc.total_break_minutes
+     FROM time_clock tc
+     JOIN staff s ON s.id = tc.staff_id
+     WHERE tc.clock_in >= CURRENT_DATE - INTERVAL '6 days'
+       AND tc.clock_in < CURRENT_DATE + INTERVAL '1 day'
+     ORDER BY tc.clock_in DESC`
+  );
+  res.json({ success: true, entries: rows });
+});
+
+// Correct a time_clock entry (admin-only)
+router.put('/staff/time-clock/:id', verifyAdmin, validate(timeClockEditSchema), async (req, res) => {
+  const { id } = req.params;
+  const { clock_in, clock_out, total_break_minutes } = req.body;
+
+  if (clock_out && new Date(clock_out) <= new Date(clock_in)) {
+    return res.status(400).json({ success: false, error: 'La salida debe ser después de la entrada' });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE time_clock
+     SET clock_in = $1, clock_out = $2, total_break_minutes = $3
+     WHERE id = $4
+     RETURNING id, staff_id, clock_in, clock_out, total_break_minutes`,
+    [clock_in, clock_out || null, total_break_minutes, id]
+  );
+
+  if (!rows[0]) {
+    return res.status(404).json({ success: false, error: 'Registro no encontrado' });
+  }
+  res.json({ success: true, entry: rows[0] });
+});
+
+// Delete a mistaken time_clock entry, e.g. a double clock-in (admin-only)
+router.delete('/staff/time-clock/:id', verifyAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { rows } = await pool.query('DELETE FROM time_clock WHERE id = $1 RETURNING id', [id]);
+  if (!rows[0]) {
+    return res.status(404).json({ success: false, error: 'Registro no encontrado' });
+  }
+  res.json({ success: true });
 });
 
 // Hourly rate endpoints
