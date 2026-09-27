@@ -43,7 +43,7 @@ function renderPhoneForm(message = '') {
   renderShell(`
     <form class="loyalty-form" id="loyalty-phone-form">
       <label for="loyalty-phone">Tu número de teléfono</label>
-      <input class="search" id="loyalty-phone" inputmode="numeric" maxlength="10" placeholder="4491234567" value="${escapeHtml(lastPhone)}" required>
+      <input class="search" id="loyalty-phone" name="phone" type="tel" autocomplete="tel" inputmode="numeric" maxlength="10" placeholder="4491234567" value="${escapeHtml(lastPhone)}" required>
       <button type="submit" class="button">Ver mi tarjeta</button>
     </form>
     ${message ? `<div class="empty error loyalty-error">${escapeHtml(message)}</div>` : ''}
@@ -56,7 +56,7 @@ function renderSignupForm(phone) {
     <p class="loyalty-progress-label">No encontramos una tarjeta con este número. ¿Quieres crear una?</p>
     <form class="loyalty-form" id="loyalty-signup-form">
       <label for="loyalty-nombre">Tu nombre (opcional)</label>
-      <input class="search" id="loyalty-nombre" maxlength="120" placeholder="Ej. Ana">
+      <input class="search" id="loyalty-nombre" name="nombre" autocomplete="name" maxlength="120" placeholder="Ej. Ana">
       <div class="checkbox-field" style="margin-top:14px">
         <label><input type="checkbox" id="loyalty-consent"> Quiero recibir promociones por WhatsApp/SMS</label>
       </div>

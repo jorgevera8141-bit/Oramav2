@@ -314,7 +314,7 @@ async function promociones() {
         <div class="field-group"><label for="pin-actor-nombre">Tu nombre</label>
           <select class="search" id="pin-actor-nombre">${options.map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
         </div>
-        <div class="field-group"><label for="pin-actor-pin">Tu PIN</label><input class="search" id="pin-actor-pin" type="password" inputmode="numeric" maxlength="10"></div>
+        <div class="field-group"><label for="pin-actor-pin">Tu PIN</label><input class="search" id="pin-actor-pin" type="password" inputmode="numeric" maxlength="10" autocomplete="off"></div>
         ${requireNota ? `<div class="field-group"><label for="pin-nota">Nota</label><input class="search" id="pin-nota" type="text" maxlength="500"></div>` : ''}
         <div class="orama-modal-actions">
           <button type="button" class="button" data-ui="cancel">Cancelar</button>
@@ -364,7 +364,7 @@ async function promociones() {
         <div class="field-group"><label for="review-actor">Tu nombre (gerencia)</label>
           <select class="search" id="review-actor">${staffList.filter((s) => s.tipo === 'management').map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
         </div>
-        <div class="field-group"><label for="review-pin">Tu PIN</label><input class="search" id="review-pin" type="password" inputmode="numeric" maxlength="10"></div>
+        <div class="field-group"><label for="review-pin">Tu PIN</label><input class="search" id="review-pin" type="password" inputmode="numeric" maxlength="10" autocomplete="off"></div>
         <div class="field-group"><label for="review-nota">Nota (requerida para solicitar cambios)</label><input class="search" id="review-nota" type="text" maxlength="500"></div>
       </div>
       <div class="orama-modal-actions">
@@ -425,7 +425,7 @@ async function promociones() {
         <div class="field-group"><label for="social-review-actor">Tu nombre (gerencia)</label>
           <select class="search" id="social-review-actor">${staffList.filter((s) => s.tipo === 'management').map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
         </div>
-        <div class="field-group"><label for="social-review-pin">Tu PIN</label><input class="search" id="social-review-pin" type="password" inputmode="numeric" maxlength="10"></div>
+        <div class="field-group"><label for="social-review-pin">Tu PIN</label><input class="search" id="social-review-pin" type="password" inputmode="numeric" maxlength="10" autocomplete="off"></div>
         <div class="field-group"><label for="social-review-nota">Nota (requerida para solicitar cambios)</label><input class="search" id="social-review-nota" type="text" maxlength="500"></div>
       </div>
       <div class="orama-modal-actions">

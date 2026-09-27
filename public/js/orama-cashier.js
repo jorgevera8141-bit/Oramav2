@@ -50,7 +50,7 @@ async function cashier() {
         <div class="field-group"><label for="pin-actor-nombre">Tu nombre</label>
           <select class="search" id="pin-actor-nombre">${staffList.map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
         </div>
-        <div class="field-group"><label for="pin-actor-pin">Tu PIN</label><input class="search" id="pin-actor-pin" type="password" inputmode="numeric" maxlength="10"></div>
+        <div class="field-group"><label for="pin-actor-pin">Tu PIN</label><input class="search" id="pin-actor-pin" type="password" inputmode="numeric" maxlength="10" autocomplete="off"></div>
         <div class="orama-modal-actions">
           <button type="button" class="button" data-ui="cancel">Cancelar</button>
           <button type="button" class="button" data-ui="confirm">Confirmar</button>
@@ -485,7 +485,7 @@ async function cashier() {
         return `<div class="order-card" style="margin-bottom:10px">
           <div class="order-card-head"><h2 class="order-card-mesa" style="font-size:16px">${escapeHtml(person.name)}</h2><span class="mono">${money.format(subtotal)}</span></div>
           <p class="subtle" style="margin:0 0 10px">${person.paid ? `${icon('check')}Pagado` : 'Pendiente'}</p>
-          ${personItems.length ? `<ul class="order-card-items">${personItems.map((item) => `<li style="justify-content:space-between"><span>${escapeHtml(item.nombre)}</span><span class="mono">${money.format(item.precio)}</span>${!person.paid ? `<button type="button" class="button danger" style="min-height:32px;width:auto;padding:2px 10px" data-unassign="${item.id}">×</button>` : ''}</li>`).join('')}</ul>` : '<p class="subtle">Sin artículos</p>'}
+          ${personItems.length ? `<ul class="order-card-items">${personItems.map((item) => `<li style="justify-content:space-between"><span>${escapeHtml(item.nombre)}</span><span class="mono">${money.format(item.precio)}</span>${!person.paid ? `<button type="button" class="button danger" style="min-height:32px;width:auto;padding:2px 10px" data-unassign="${item.id}" aria-label="Quitar ${escapeHtml(item.nombre)} de ${escapeHtml(person.name)}">×</button>` : ''}</li>`).join('')}</ul>` : '<p class="subtle">Sin artículos</p>'}
           ${!person.paid && subtotal > 0 ? `<button type="button" class="button" data-pay-person="${person.id}">Cobrar ${money.format(subtotal)}</button>` : ''}
         </div>`;
       }).join('');

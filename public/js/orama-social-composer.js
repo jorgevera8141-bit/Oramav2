@@ -79,7 +79,7 @@
           <div class="sc-ai-row">
             <button type="button" class="button sc-ai-btn" data-ai="draft">${icon('sparkle')}Generar texto</button>
             <button type="button" class="button sc-ai-btn" data-ai="image">${icon('sparkle')}Generar imagen</button>
-            <input class="search sc-ai-pin" id="sc-ai-pin" type="password" inputmode="numeric" maxlength="10" placeholder="PIN para IA" aria-label="PIN para generar con IA">
+            <input class="search sc-ai-pin" id="sc-ai-pin" type="password" inputmode="numeric" maxlength="10" placeholder="PIN para IA" aria-label="PIN para generar con IA" autocomplete="off">
           </div>
           <div class="field-group"><label for="sc-ai-contexto">Contexto / referencia para la IA (opcional)</label>
             <textarea class="search" id="sc-ai-contexto" rows="2" maxlength="1000" placeholder="Pega un post de referencia, hashtags habituales, el tono deseado o un ángulo de temporada…"></textarea>

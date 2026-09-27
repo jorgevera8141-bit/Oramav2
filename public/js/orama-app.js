@@ -40,79 +40,48 @@ function formatSummaryHours(row) {
   return hours.toFixed(2);
 }
 
+// Themed PIN gate for management-only screens (nomina, pricing). Built on the
+// same .orama-overlay/.orama-modal pattern every other modal in the app uses
+// (see openPinModal in orama-cashier.js/orama-promociones.js) instead of a
+// one-off light-mode popup, so it doesn't clash with the dark theme. Resolves
+// null on cancel/Escape (never rejects) so callers can just check for a
+// falsy result instead of needing a try/catch around the prompt itself.
 async function promptForStaffPin({ title, subtitle }) {
-  console.log('promptForStaffPin called with:', {title, subtitle});
-  return new Promise((resolve, reject) => {
-    const modalHtml = `
-      <div class="orma-modal-backdrop" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;"></div>
-      <div class="orma-modal" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;z-index:1001;max-width:90%;width:300px;box-sizing:border-box;">
-        <div class="orma-modal-header">
-          <h3>${escapeHtml(title)}</h3>
-          <p class="subtitle">${escapeHtml(subtitle)}</p>
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'orama-overlay';
+    overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
+      <p class="orama-modal-message">${escapeHtml(title)}</p>
+      <p class="subtle" style="margin:-10px 0 18px">${escapeHtml(subtitle)}</p>
+      <form id="staff-pin-form">
+        <div class="field-group"><label for="staff-nombre">Nombre</label><input class="search" id="staff-nombre" type="text" required></div>
+        <div class="field-group"><label for="staff-pin">PIN</label><input class="search" id="staff-pin" type="password" inputmode="numeric" maxlength="10" autocomplete="off" required></div>
+        <div class="orama-modal-actions">
+          <button type="button" class="button" data-ui="cancel">Cancelar</button>
+          <button type="submit" class="button">Confirmar</button>
         </div>
-        <div class="orma-modal-body">
-          <form id="staff-pin-form">
-            <div class="field-group">
-              <label for="staff-nombre">Nombre</label>
-              <input type="text" id="staff-nombre" required style="width:100%;padding:8px;margin:8px 0;box-sizing:border-box;">
-            </div>
-            <div class="field-group">
-              <label for="staff-pin">PIN</label>
-              <input type="password" id="staff-pin" inputmode="numeric" maxlength="10" required style="width:100%;padding:8px;margin:8px 0;box-sizing:border-box;">
-            </div>
-            <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:15px;">
-              <button type="button" id="staff-pin-cancel" style="padding:8px 16px;">Cancelar</button>
-              <button type="submit" id="staff-pin-ok" style="padding:8px 16px;background:#007bff;color:white;border:none;border-radius:4px;">OK</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    `;
+      </form>
+    </div>`;
+    document.body.appendChild(overlay);
 
-    const appDiv = document.getElementById('app');
-    appDiv.insertAdjacentHTML('beforeend', modalHtml);
+    const form = overlay.querySelector('#staff-pin-form');
+    const onKey = (event) => { if (event.key === 'Escape') close(null); };
+    function close(value) {
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+      resolve(value);
+    }
 
-    const modal = appDiv.lastChild;
-    const form = modal.querySelector('#staff-pin-form');
-    const cancelBtn = modal.querySelector('#staff-pin-cancel');
-    const okBtn = modal.querySelector('#staff-pin-ok');
-
-    const cleanup = () => {
-      modal.remove();
-      form.removeEventListener('submit', onSubmit);
-      cancelBtn.removeEventListener('click', onCancel);
-      okBtn.removeEventListener('click', onOk);
-    };
-
-    const onSubmit = (e) => {
-      e.preventDefault();
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
       const nombre = document.getElementById('staff-nombre').value.trim();
       const pin = document.getElementById('staff-pin').value;
-      console.log('promptForStaffPin result:', {nombre, pinLength: pin.length});
-      if (nombre && pin) {
-        resolve({ nombre, pin });
-      } else {
-        // Show error? For now, we'll just reject if empty.
-        reject(new Error('Nombre y PIN son requeridos'));
-      }
-      cleanup();
-    };
+      close(nombre && pin ? { nombre, pin } : null);
+    });
+    overlay.querySelector('[data-ui="cancel"]').addEventListener('click', () => close(null));
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) close(null); });
+    document.addEventListener('keydown', onKey);
 
-    const onCancel = () => {
-      console.log('promptForStaffPin cancelled');
-      reject(new Error('Cancelled'));
-      cleanup();
-    };
-
-    const onOk = () => {
-      form.dispatchEvent(new Event('submit'));
-    };
-
-    form.addEventListener('submit', onSubmit);
-    cancelBtn.addEventListener('click', onCancel);
-    okBtn.addEventListener('click', onOk);
-
-    // Focus the first input
     document.getElementById('staff-nombre').focus();
   });
 }
@@ -125,43 +94,43 @@ async function mainMenu() {
     '/images/cafe-ambiance.jpg'
   ) + `
     <section class="menu-grid">
-      <button class="menu-button" data-feature="dashboard">
-        <div class="menu-icon">📊</div>
+      <button type="button" class="menu-button" data-feature="dashboard">
+        <div class="menu-icon" aria-hidden="true">📊</div>
         <div class="menu-text">
           <h3>Control de Hoy</h3>
           <p>Resumen diario de ventas e inventario</p>
         </div>
       </button>
-      <button class="menu-button" data-feature="mesas">
-        <div class="menu-icon">🪑</div>
+      <button type="button" class="menu-button" data-feature="mesas">
+        <div class="menu-icon" aria-hidden="true">🪑</div>
         <div class="menu-text">
           <h3>Gestión de Mesas</h3>
           <p>Estado en tiempo real de las mesas</p>
         </div>
       </button>
-      <button class="menu-button" data-feature="ordenes">
-        <div class="menu-icon">📋</div>
+      <button type="button" class="menu-button" data-feature="ordenes">
+        <div class="menu-icon" aria-hidden="true">📋</div>
         <div class="menu-text">
           <h3>Órdenes</h3>
           <p>Seguimiento de ventas y cobros</p>
         </div>
       </button>
-      <button class="menu-button" data-feature="staff">
-        <div class="menu-icon">𑑂</div>
+      <button type="button" class="menu-button" data-feature="staff">
+        <div class="menu-icon" aria-hidden="true">𑑂</div>
         <div class="menu-text">
           <h3>Staff</h3>
           <p>Control de asistencia y personal</p>
         </div>
       </button>
-      <button class="menu-button" data-feature="nomina">
-        <div class="menu-icon">💰</div>
+      <button type="button" class="menu-button" data-feature="nomina">
+        <div class="menu-icon" aria-hidden="true">💰</div>
         <div class="menu-text">
           <h3>Nómina</h3>
           <p>Gestión de tiempo y pagos</p>
         </div>
       </button>
-      <button class="menu-button" data-feature="pricing">
-        <div class="menu-icon">🧮</div>
+      <button type="button" class="menu-button" data-feature="pricing">
+        <div class="menu-icon" aria-hidden="true">🧮</div>
         <div class="menu-text">
           <h3>Calculadora de Precios</h3>
           <p>Análisis de costos y márgenes</p>
@@ -170,36 +139,26 @@ async function mainMenu() {
     </section>
   `;
 
-  // Add event listeners for feature selection
+  // Feature buttons navigate via the hash so orama-router.js owns the render
+  // (keeps nav highlighting, the back button, and router error handling
+  // consistent with every other page instead of writing to #app directly).
   document.querySelectorAll('.menu-button[data-feature]').forEach(button => {
-    button.addEventListener('click', async () => {
-      const feature = button.dataset.feature;
-      // Disable button during transition
-      button.disabled = true;
-      button.innerHTML = '<div class="menu-icon">⏳</div><div class="menu-text"><p>Cargando...</p></div>';
-
-      try {
-        // Call the selected feature function
-        if (typeof Orama.routes[feature] === 'function') {
-          await Orama.routes[feature]();
-        } else {
-          throw new Error(`Feature ${feature} not implemented`);
-        }
-      } catch (error) {
-        Orama.toast(`Error al cargar ${feature}: ${error.message}`, 'error');
-        console.error(error);
-        // Return to main menu on error
-        await mainMenu();
-      } finally {
-        // Re-enable button after attempt
-        button.disabled = false;
-      }
+    button.addEventListener('click', () => {
+      window.location.hash = `#${button.dataset.feature}`;
     });
   });
 }
 
-// Initialize the application when the DOM is loaded
-document.addEventListener('DOMContentLoaded', mainMenu);
+// Landing screen: register mainMenu as a real route and, if the app opens
+// with no route in the URL, send it there instead of the dashboard default.
+// Setting the hash (rather than rendering into #app directly, like this used
+// to) lets orama-router.js's own window.render() own the actual render —
+// this runs before that first render (script order in index.html), so there
+// is no more DOMContentLoaded race stomping whatever route had just loaded.
+Orama.routes['menu-principal'] = mainMenu;
+if (typeof window !== 'undefined' && !window.location.hash) {
+  window.location.hash = '#menu-principal';
+}
 
 async function dashboard() {
   const [ordersData, inventoryData] = await Promise.all([
@@ -596,12 +555,9 @@ async function staff() {
 
 async function nomina() {
   // Check if user is management via PIN
-  const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
-
-  if (!nombre || !pin) {
-    Orama.toast('Acceso denegado', 'error');
-    return;
-  }
+  const auth = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
+  if (!auth) return; // cancelled — no error toast needed
+  const { nombre, pin } = auth;
 
   try {
     // Verify staff is management
@@ -684,8 +640,8 @@ async function nomina() {
           <h3>Resumen Semanal de Nómina</h3>
           ${payrollData.length > 0 ? `
             <div class="payroll-summary">
-              <p><strong>Total nómina semanal:</strong> $${payrollResponse.summary.totalPayroll.toFixed(2)} MXN</p>
-              <p><strong>Promedio por empleado:</strong> $${payrollResponse.summary.averageWeeklyEarnings.toFixed(2)} MXN</p>
+              <p><strong>Total nómina semanal:</strong> ${money.format(payrollResponse.summary.totalPayroll)}</p>
+              <p><strong>Promedio por empleado:</strong> ${money.format(payrollResponse.summary.averageWeeklyEarnings)}</p>
               <p><strong>Empleados activos:</strong> ${payrollResponse.summary.totalStaff}</p>
             </div>
             <table class="payroll-table">
@@ -703,9 +659,9 @@ async function nomina() {
                   <tr>
                     <td><span class="avatar">${escapeHtml(p.nombre).charAt(0).toUpperCase()}</span> ${escapeHtml(p.nombre)}</td>
                     <td>${escapeHtml(p.tipo)}</td>
-                    <td>$${p.hourly_rate.toFixed(2)} MXN</td>
+                    <td>${money.format(p.hourly_rate)}</td>
                     <td>${p.weeklyHours.toFixed(2)} hrs</td>
-                    <td>$${p.weeklyEarnings.toFixed(2)} MXN</td>
+                    <td>${money.format(p.weeklyEarnings)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -895,15 +851,15 @@ async function nomina() {
 
           if (response.success) {
             let resultsHTML = `<h4>Resultado de la distribución:</h4>`;
-            resultsHTML += `<p><strong>Total propinas:</strong> $${response.tipsAmount.toFixed(2)} MXN</p>`;
+            resultsHTML += `<p><strong>Total propinas:</strong> ${money.format(response.tipsAmount)}</p>`;
             resultsHTML += `<p><strong>Método:</strong> ${response.distributionType}</p>`;
-            resultsHTML += `<p><strong>Distribuido:</strong> $${response.summary.totalDistributed.toFixed(2)} MXN</p>`;
+            resultsHTML += `<p><strong>Distribuido:</strong> ${money.format(response.summary.totalDistributed)}</p>`;
             if (response.summary.remainingTips > 0) {
-              resultsHTML += `<p><strong>Restante:</strong> $${response.summary.remainingTips.toFixed(2)} MXN</p>`;
+              resultsHTML += `<p><strong>Restante:</strong> ${money.format(response.summary.remainingTips)}</p>`;
             }
             resultsHTML += `<div class="mt-3"><strong>Distribución por empleado:</strong><ul>`;
             response.distribution.forEach(d => {
-              resultsHTML += `<li><strong>${escapeHtml(d.nombre)}</strong>: $${d.amount.toFixed(2)} MXN`;
+              resultsHTML += `<li><strong>${escapeHtml(d.nombre)}</strong>: ${money.format(d.amount)}`;
               if (d.hoursWorked !== undefined) {
                 resultsHTML += ` (${d.hoursWorked.toFixed(2)} hrs)`;
               }
@@ -982,12 +938,9 @@ async function nomina() {
 
 async function pricing() {
   // Check if user is management via PIN
-  const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
-
-  if (!nombre || !pin) {
-    Orama.toast('Acceso denegado', 'error');
-    return;
-  }
+  const auth = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
+  if (!auth) return; // cancelled — no error toast needed
+  const { nombre, pin } = auth;
 
   try {
     // Verify staff is management
@@ -1125,7 +1078,7 @@ async function calculatePrice() {
   try {
     const btn = document.getElementById('calculatePriceBtn');
     btn.disabled = true;
-    btn.textContent = 'Calculando...';
+    btn.textContent = 'Calculando…';
 
     const productId = document.getElementById('productSelect').value;
     const productName = document.getElementById('newProductName').value.trim();
@@ -1233,19 +1186,19 @@ function showResults(result) {
     <div class="results-grid">
       <div>
         <label>Costo total por porción:</label>
-        <p class="price-label">$${result.totalCostPerServing.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.totalCostPerServing)}</p>
       </div>
       <div>
         <label>Precio de venta sugerido:</label>
-        <p class="price-label">$${result.suggestedSellingPrice.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.suggestedSellingPrice)}</p>
       </div>
       <div>
         <label>Precio con IVA:</label>
-        <p class="price-label">$${result.priceWithIVA.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.priceWithIVA)}</p>
       </div>
       <div>
         <label>Precio sin IVA:</label>
-        <p class="price-label">$${result.priceWithoutIVA.toFixed(2)} MXN</p>
+        <p class="price-label">${money.format(result.priceWithoutIVA)}</p>
       </div>
       <div>
         <label>Margen actual:</label>
@@ -1261,7 +1214,7 @@ function showResults(result) {
       </div>
       <div>
         <label>Diferencia:</label>
-        <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}$${result.savingsOrShortfall.toFixed(2)} MXN</p>
+        <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}${money.format(result.savingsOrShortfall)}</p>
       </div>
     </div>
 
@@ -1275,7 +1228,7 @@ async function saveAsRecipe() {
   try {
     const btn = document.querySelector('.results-section .button.secondary');
     btn.disabled = true;
-    btn.textContent = 'Guardando...';
+    btn.textContent = 'Guardando…';
 
     const productId = document.getElementById('productSelect').value;
     const productName = document.getElementById('newProductName').value.trim();
@@ -1334,7 +1287,7 @@ async function loadSavedRecipes() {
   try {
     const btn = document.getElementById('loadRecipesBtn');
     btn.disabled = true;
-    btn.textContent = 'Cargando...';
+    btn.textContent = 'Cargando…';
 
     // TODO: Implement loading saved recipes from API
     // For now, show placeholder
@@ -1357,15 +1310,12 @@ window.removeIngredient = removeIngredient;
 window.calculatePrice = calculatePrice;
 window.saveAsRecipe = saveAsRecipe;
 window.loadSavedRecipes = loadSavedRecipes;
-window.render = mainMenu;
 
 Orama.routes.dashboard = dashboard;
 Orama.routes.mesas = mesas;
 Orama.routes.ordenes = orders;
 Orama.routes.staff = staff;
 Orama.routes.nomina = nomina;
-Orama.routes.pricing = pricing;
-
 Orama.routes.pricing = pricing;
 
 document.addEventListener('click', async (event) => {
