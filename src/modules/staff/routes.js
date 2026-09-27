@@ -304,7 +304,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
        break_end,
        total_break_minutes,
        EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600 as hours_worked_raw,
-       (EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0) as hours_worked
+       ((EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0))::float8 as hours_worked
      FROM time_clock
      WHERE staff_id = $1
        AND clock_in >= CURRENT_DATE - INTERVAL '6 days'
@@ -314,10 +314,13 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
     [staffId]
   );
 
-  // Calculate totals
-  const totalHours = timeClockRows.reduce((sum, day) => sum + (day.hours_worked || 0), 0);
-  const totalEarnings = totalHours * (staffRows[0].hourly_rate || 0);
-  const daysWorked = timeClockRows.filter(day => day.hours_worked > 0).length;
+  // Calculate totals (hours_worked/hourly_rate come back from Postgres as
+  // numeric strings, not JS numbers - coerce explicitly rather than relying
+  // on the SQL cast alone)
+  const staffHourlyRate = parseFloat(staffRows[0].hourly_rate) || 0;
+  const totalHours = timeClockRows.reduce((sum, day) => sum + (Number(day.hours_worked) || 0), 0);
+  const totalEarnings = totalHours * staffHourlyRate;
+  const daysWorked = timeClockRows.filter(day => Number(day.hours_worked) > 0).length;
 
   res.json({
     success: true,
@@ -325,7 +328,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
       id: staffRows[0].id,
       nombre: staffRows[0].nombre,
       tipo: staffRows[0].tipo,
-      hourly_rate: staffRows[0].hourly_rate || 0.00
+      hourly_rate: staffHourlyRate
     },
     weekSummary: {
       totalHours: parseFloat(totalHours.toFixed(2)),
@@ -333,7 +336,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
       daysWorked,
       dailyDetails: timeClockRows.map(day => ({
         date: day.clock_in.toISOString().split('T')[0],
-        hoursWorked: parseFloat((day.hours_worked || 0).toFixed(2)),
+        hoursWorked: parseFloat((Number(day.hours_worked) || 0).toFixed(2)),
         clockIn: day.clock_in.toISOString(),
         clockOut: day.clock_out ? day.clock_out.toISOString() : null,
         breakMinutes: day.total_break_minutes || 0
@@ -357,7 +360,7 @@ router.get('/staff/payroll/weekly', async (req, res) => {
     const { rows: timeClockRows } = await pool.query(
       `SELECT
          EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600 as hours_worked_raw,
-         (EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0) as hours_worked
+         ((EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0))::float8 as hours_worked
        FROM time_clock
        WHERE staff_id = $1
          AND clock_in >= CURRENT_DATE - INTERVAL '6 days'
@@ -367,7 +370,7 @@ router.get('/staff/payroll/weekly', async (req, res) => {
     );
 
     const hourlyRate = parseFloat(staff.hourly_rate) || 0;
-    const totalHours = timeClockRows.reduce((sum, day) => sum + (day.hours_worked || 0), 0);
+    const totalHours = timeClockRows.reduce((sum, day) => sum + (Number(day.hours_worked) || 0), 0);
     const totalEarnings = totalHours * hourlyRate;
     totalPayroll += totalEarnings;
 
