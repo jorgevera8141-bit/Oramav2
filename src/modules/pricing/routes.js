@@ -63,6 +63,7 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
       productName,
       ingredients,
       extraCosts,
+      preparation,
       fixedCosts,
       estimatedMonthlyUnits,
       targetMargin,
@@ -81,9 +82,20 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
       menuPrice = product.precio;
     }
 
+    // Labor cost per serving from actual prep time and wage, not a guessed flat
+    // number: (prep time in hours x hourly wage) split across the batch's yield.
+    // Falls back to the manual extraCosts.labor field when no prep time is set.
+    const laborCostPerServing = preparation.prepTimeMinutes > 0
+      ? (preparation.prepTimeMinutes / 60 * preparation.laborRatePerHour) / preparation.yieldServings
+      : (extraCosts.labor || 0);
+    const effectiveExtraCosts = { ...extraCosts, labor: laborCostPerServing };
+
+    // Ingredient-only cost (no packaging/labor/other) for the Prime Cost KPI below
+    const ingredientsCost = await calculateCostPerServing(ingredients, { packaging: 0, labor: 0, other: 0 });
+
     // Calculate total cost per serving
-    const totalCostPerServing = await calculateCostPerServing(ingredients, extraCosts);
-    
+    const totalCostPerServing = await calculateCostPerServing(ingredients, effectiveExtraCosts);
+
     // Calculate suggested selling price at target margin
     // Formula: selling_price = cost_per_serving / (1 - target_margin/100)
     const targetMarginDecimal = targetMargin / 100;
@@ -126,6 +138,11 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
     // Calculate savings/shortfall
     const savingsOrShortfall = menuPrice - suggestedSellingPrice;
 
+    // Prime Cost = ingredients + labor, the standard restaurant health metric.
+    // Rule of thumb: keep it at or below 60-65% of the selling price.
+    const primeCost = ingredientsCost + laborCostPerServing;
+    const primeCostPercent = suggestedSellingPrice > 0 ? (primeCost / suggestedSellingPrice) * 100 : 0;
+
     const result = {
       totalCostPerServing: parseFloat(totalCostPerServing.toFixed(2)),
       suggestedSellingPrice: parseFloat(suggestedSellingPrice.toFixed(2)),
@@ -136,6 +153,10 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
       priceWithoutIVA: parseFloat(priceWithoutIVA.toFixed(2)),
       isBelowTarget,
       savingsOrShortfall: parseFloat(savingsOrShortfall.toFixed(2)),
+      ingredientsCost: parseFloat(ingredientsCost.toFixed(2)),
+      laborCostPerServing: parseFloat(laborCostPerServing.toFixed(2)),
+      primeCost: parseFloat(primeCost.toFixed(2)),
+      primeCostPercent: parseFloat(primeCostPercent.toFixed(1)),
       totalMonthlyFixedCosts: parseFloat(totalMonthlyFixedCosts.toFixed(2)),
       estimatedMonthlyUnits: estimatedMonthlyUnits || null,
       fixedCostPerUnit: fixedCostPerUnit !== null ? parseFloat(fixedCostPerUnit.toFixed(2)) : null,

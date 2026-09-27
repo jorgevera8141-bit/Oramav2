@@ -914,17 +914,42 @@ async function pricing() {
             <input type="text" id="newProductName" placeholder="Nombre del producto">
           </div>
           <div class="form-section">
-            <label>Ingredientes:</label>
+            <label>Insumos usados y cantidad (costo por kg/litro/pieza según la unidad elegida):</label>
             <div id="ingredientsContainer">
               <div class="ingredient-row">
-                <input type="text" class="ingredient-name" placeholder="Nombre del ingrediente">
-                <input type="number" class="quantity" placeholder="Cantidad" step="0.01" min="0">
-                <input type="text" class="unit" placeholder="Unidad" value="pieza">
-                <input type="number" class="unit-cost" placeholder="Costo unitario" step="0.01" min="0">
+                <input type="text" class="ingredient-name" placeholder="Nombre del insumo">
+                <input type="number" class="quantity" placeholder="Cantidad usada" step="0.01" min="0">
+                <input type="text" class="unit" placeholder="Unidad (kg, litro, g, ml, pieza)" value="pieza">
+                <input type="number" class="unit-cost" placeholder="Costo por kg/litro/pieza" step="0.01" min="0">
                 <button class="button small" type="button" onclick="removeIngredient(this)">-</button>
               </div>
             </div>
-            <button class="button secondary" type="button" onclick="addIngredientField()">+ Agregar ingrediente</button>
+            <button class="button secondary" type="button" onclick="addIngredientField()">+ Agregar insumo</button>
+            <p class="subtle">Ejemplo: si el café cuesta $220 por kg y usas 20g, pon Unidad = "kg" y Cantidad usada = 0.02 (20g = 0.02kg).</p>
+          </div>
+          <div class="form-section">
+            <label>Tiempo de preparación y mano de obra:</label>
+            <div class="cost-grid">
+              <div>
+                <label>Tiempo de preparación (minutos):</label>
+                <input type="number" id="prepTimeMinutes" step="1" min="0" value="0">
+              </div>
+              <div>
+                <label>Rendimiento (porciones que produce esa preparación):</label>
+                <input type="number" id="yieldServings" step="1" min="1" value="1">
+              </div>
+              <div>
+                <label>Tarifa de mano de obra (MXN/hora):</label>
+                <input type="number" id="laborRatePerHour" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>O usar tarifa de un empleado:</label>
+                <select id="laborStaffSelect">
+                  <option value="">-- Escribir tarifa manualmente --</option>
+                </select>
+              </div>
+            </div>
+            <p class="subtle">Costo de mano de obra = (minutos ÷ 60 × tarifa por hora) ÷ rendimiento. Ej: 20 min a $120/hora entre 10 porciones = $4.00 por porción.</p>
           </div>
           <div class="form-section">
             <label>Costos extra por unidad:</label>
@@ -932,10 +957,6 @@ async function pricing() {
               <div>
                 <label>Embalaje (MXN):</label>
                 <input type="number" id="extraPackaging" step="0.01" min="0" value="0">
-              </div>
-              <div>
-                <label>Mano de obra (MXN):</label>
-                <input type="number" id="extraLabor" step="0.01" min="0" value="0">
               </div>
               <div>
                 <label>Otros (MXN):</label>
@@ -1005,6 +1026,25 @@ async function pricing() {
       console.error('Error loading products:', error);
     }
 
+    // Load staff hourly rates for the labor rate picker
+    try {
+      const staffResponse = await api('/api/staff');
+      const laborStaffSelect = document.getElementById('laborStaffSelect');
+      (staffResponse.staff || []).filter((s) => s.activo).forEach((s) => {
+        const option = document.createElement('option');
+        option.value = s.hourly_rate || 0;
+        option.textContent = `${s.nombre} - $${(s.hourly_rate || 0).toFixed(2)}/hora`;
+        laborStaffSelect.appendChild(option);
+      });
+      laborStaffSelect.addEventListener('change', () => {
+        if (laborStaffSelect.value !== '') {
+          document.getElementById('laborRatePerHour').value = laborStaffSelect.value;
+        }
+      });
+    } catch (error) {
+      console.error('Error loading staff rates:', error);
+    }
+
     // Add event listeners
     document.getElementById('calculatePriceBtn').addEventListener('click', calculatePrice);
     document.getElementById('loadRecipesBtn').addEventListener('click', loadSavedRecipes);
@@ -1016,7 +1056,7 @@ async function pricing() {
 
     // Remember monthly fixed costs between visits (rent/phone/payroll rarely change)
     restoreFixedCostInputs();
-    ['fixedRent', 'fixedPhone', 'fixedPayroll', 'fixedOther', 'estimatedMonthlyUnits'].forEach((id) => {
+    ['fixedRent', 'fixedPhone', 'fixedPayroll', 'fixedOther', 'estimatedMonthlyUnits', 'laborRatePerHour'].forEach((id) => {
       document.getElementById(id).addEventListener('change', saveFixedCostInputs);
     });
 
@@ -1036,7 +1076,8 @@ function saveFixedCostInputs() {
       fixedPhone: document.getElementById('fixedPhone').value,
       fixedPayroll: document.getElementById('fixedPayroll').value,
       fixedOther: document.getElementById('fixedOther').value,
-      estimatedMonthlyUnits: document.getElementById('estimatedMonthlyUnits').value
+      estimatedMonthlyUnits: document.getElementById('estimatedMonthlyUnits').value,
+      laborRatePerHour: document.getElementById('laborRatePerHour').value
     }));
   } catch (error) {
     // localStorage unavailable (private mode, etc.) - not critical
@@ -1135,8 +1176,13 @@ async function calculatePrice() {
 
     const extraCosts = {
       packaging: parseFloat(document.getElementById('extraPackaging').value) || 0,
-      labor: parseFloat(document.getElementById('extraLabor').value) || 0,
       other: parseFloat(document.getElementById('extraOther').value) || 0
+    };
+
+    const preparation = {
+      prepTimeMinutes: parseFloat(document.getElementById('prepTimeMinutes').value) || 0,
+      yieldServings: parseFloat(document.getElementById('yieldServings').value) || 1,
+      laborRatePerHour: parseFloat(document.getElementById('laborRatePerHour').value) || 0
     };
 
     const fixedCosts = {
@@ -1158,6 +1204,7 @@ async function calculatePrice() {
         productName: productName || undefined,
         ingredients,
         extraCosts,
+        preparation,
         fixedCosts,
         estimatedMonthlyUnits: estimatedMonthlyUnits > 0 ? estimatedMonthlyUnits : undefined,
         targetMargin,
@@ -1229,6 +1276,27 @@ function showResults(result) {
       <div>
         <label>Diferencia:</label>
         <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}$${result.savingsOrShortfall.toFixed(2)} MXN</p>
+      </div>
+    </div>
+
+    <h3 class="mt-4">Costo primo (Prime Cost)</h3>
+    <p class="subtle">Ingredientes + mano de obra, el indicador más usado en restaurantes/cafés. Regla general: mantenerlo en 60-65% o menos del precio de venta.</p>
+    <div class="results-grid">
+      <div>
+        <label>Costo de insumos:</label>
+        <p class="price-label">$${result.ingredientsCost.toFixed(2)} MXN</p>
+      </div>
+      <div>
+        <label>Costo de mano de obra:</label>
+        <p class="price-label">$${result.laborCostPerServing.toFixed(2)} MXN</p>
+      </div>
+      <div>
+        <label>Costo primo total:</label>
+        <p class="price-label">$${result.primeCost.toFixed(2)} MXN</p>
+      </div>
+      <div class="${result.primeCostPercent > 65 ? 'alert' : 'success'}">
+        <label>Costo primo (% del precio de venta):</label>
+        <p class="price-label">${result.primeCostPercent.toFixed(1)}%</p>
       </div>
     </div>
 

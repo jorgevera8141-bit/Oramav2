@@ -22,8 +22,9 @@ const verifyAdmin = async (req, res, next) => {
 // GET all staff (for frontend staff management interfaces)
 router.get('/staff', async (_req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, nombre, tipo, idioma, activo, created_at FROM staff ORDER BY id ASC');
-    res.json({ success: true, staff: rows });
+    const { rows } = await pool.query('SELECT id, nombre, tipo, idioma, activo, hourly_rate, created_at FROM staff ORDER BY id ASC');
+    const staff = rows.map((row) => ({ ...row, hourly_rate: parseFloat(row.hourly_rate) || 0 }));
+    res.json({ success: true, staff });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

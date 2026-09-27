@@ -31,12 +31,21 @@ const fixedCostsSchema = z.object({
   other: z.number().nonnegative().default(0)
 });
 
+// Preparation time and labor wage - real labor cost per serving is
+// (prepTimeMinutes/60 * laborRatePerHour) / yieldServings, not a guessed flat number
+const preparationSchema = z.object({
+  prepTimeMinutes: z.number().nonnegative().default(0),
+  yieldServings: z.number().positive().default(1), // servings one prep batch produces
+  laborRatePerHour: z.number().nonnegative().default(0)
+});
+
 // Price calculation input schema
 const priceCalculationSchema = z.object({
   productId: z.number().int().positive().optional(),
   productName: z.string().optional(), // For new products
   ingredients: z.array(ingredientLineSchema),
   extraCosts: extraCostsSchema,
+  preparation: preparationSchema.default({}),
   fixedCosts: fixedCostsSchema.default({}),
   estimatedMonthlyUnits: z.number().positive().optional(), // omit to skip full-cost pricing
   targetMargin: z.number().nonnegative().max(1000).default(30), // percent
@@ -54,6 +63,10 @@ const priceCalculationResultSchema = z.object({
   priceWithoutIVA: z.number().nonnegative(),
   isBelowTarget: z.boolean(),
   savingsOrShortfall: z.number(),
+  ingredientsCost: z.number().nonnegative(),
+  laborCostPerServing: z.number().nonnegative(),
+  primeCost: z.number().nonnegative(),
+  primeCostPercent: z.number().nonnegative(),
   totalMonthlyFixedCosts: z.number().nonnegative(),
   estimatedMonthlyUnits: z.number().positive().nullable(),
   fixedCostPerUnit: z.number().nonnegative().nullable(),
@@ -80,6 +93,8 @@ module.exports = {
   productSelectionSchema,
   ingredientLineSchema,
   extraCostsSchema,
+  fixedCostsSchema,
+  preparationSchema,
   priceCalculationSchema,
   priceCalculationResultSchema,
   recipeSaveSchema
