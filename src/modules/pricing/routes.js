@@ -138,9 +138,10 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
     // Calculate savings/shortfall
     const savingsOrShortfall = menuPrice - suggestedSellingPrice;
 
-    // Prime Cost = ingredients + labor, the standard restaurant health metric.
-    // Rule of thumb: keep it at or below 60-65% of the selling price.
-    const primeCost = ingredientsCost + laborCostPerServing;
+    // Prime Cost = ingredients + packaging + labor (standard COGS + labor
+    // definition - packaging counts as part of food cost). Limited-service
+    // targets (cafes) should keep this at or below ~60% of the selling price.
+    const primeCost = ingredientsCost + effectiveExtraCosts.packaging + laborCostPerServing;
     const primeCostPercent = suggestedSellingPrice > 0 ? (primeCost / suggestedSellingPrice) * 100 : 0;
 
     const result = {
@@ -154,6 +155,7 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
       isBelowTarget,
       savingsOrShortfall: parseFloat(savingsOrShortfall.toFixed(2)),
       ingredientsCost: parseFloat(ingredientsCost.toFixed(2)),
+      packagingCost: parseFloat(effectiveExtraCosts.packaging.toFixed(2)),
       laborCostPerServing: parseFloat(laborCostPerServing.toFixed(2)),
       primeCost: parseFloat(primeCost.toFixed(2)),
       primeCostPercent: parseFloat(primeCostPercent.toFixed(1)),

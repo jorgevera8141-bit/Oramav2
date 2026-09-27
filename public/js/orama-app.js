@@ -1280,11 +1280,15 @@ function showResults(result) {
     </div>
 
     <h3 class="mt-4">Costo primo (Prime Cost)</h3>
-    <p class="subtle">Ingredientes + mano de obra, el indicador más usado en restaurantes/cafés. Regla general: mantenerlo en 60-65% o menos del precio de venta.</p>
+    <p class="subtle">Insumos + embalaje + mano de obra, el indicador más usado en restaurantes/cafés. Para un negocio de servicio limitado como una cafetería, mantenerlo en 60% o menos del precio de venta.</p>
     <div class="results-grid">
       <div>
         <label>Costo de insumos:</label>
         <p class="price-label">$${result.ingredientsCost.toFixed(2)} MXN</p>
+      </div>
+      <div>
+        <label>Costo de embalaje:</label>
+        <p class="price-label">$${result.packagingCost.toFixed(2)} MXN</p>
       </div>
       <div>
         <label>Costo de mano de obra:</label>
@@ -1294,7 +1298,7 @@ function showResults(result) {
         <label>Costo primo total:</label>
         <p class="price-label">$${result.primeCost.toFixed(2)} MXN</p>
       </div>
-      <div class="${result.primeCostPercent > 65 ? 'alert' : 'success'}">
+      <div class="${result.primeCostPercent > 60 ? 'alert' : 'success'}">
         <label>Costo primo (% del precio de venta):</label>
         <p class="price-label">${result.primeCostPercent.toFixed(1)}%</p>
       </div>

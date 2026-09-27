@@ -64,6 +64,7 @@ const priceCalculationResultSchema = z.object({
   isBelowTarget: z.boolean(),
   savingsOrShortfall: z.number(),
   ingredientsCost: z.number().nonnegative(),
+  packagingCost: z.number().nonnegative(),
   laborCostPerServing: z.number().nonnegative(),
   primeCost: z.number().nonnegative(),
   primeCostPercent: z.number().nonnegative(),
