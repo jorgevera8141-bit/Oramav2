@@ -4,3 +4,6 @@ node_modules/
 .DS_Store
 public/uploads/*
 !public/uploads/.gitkeep
+*.backup
+__pycache__/
+*.pyc

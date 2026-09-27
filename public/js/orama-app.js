@@ -40,124 +40,61 @@ function formatSummaryHours(row) {
   return hours.toFixed(2);
 }
 
-// Themed PIN gate for management-only screens (nomina, pricing). Built on the
-// same .orama-overlay/.orama-modal pattern every other modal in the app uses
-// (see openPinModal in orama-cashier.js/orama-promociones.js) instead of a
-// one-off light-mode popup, so it doesn't clash with the dark theme. Resolves
-// null on cancel/Escape (never rejects) so callers can just check for a
-// falsy result instead of needing a try/catch around the prompt itself.
 async function promptForStaffPin({ title, subtitle }) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
-      <p class="orama-modal-message">${escapeHtml(title)}</p>
-      <p class="subtle" style="margin:-10px 0 18px">${escapeHtml(subtitle)}</p>
-      <form id="staff-pin-form">
-        <div class="field-group"><label for="staff-nombre">Nombre</label><input class="search" id="staff-nombre" type="text" required></div>
-        <div class="field-group"><label for="staff-pin">PIN</label><input class="search" id="staff-pin" type="password" inputmode="numeric" maxlength="10" autocomplete="off" required></div>
-        <div class="orama-modal-actions">
-          <button type="button" class="button" data-ui="cancel">Cancelar</button>
-          <button type="submit" class="button">Confirmar</button>
-        </div>
-      </form>
-    </div>`;
+    overlay.innerHTML = `
+      <div class="orama-modal" role="none" aria-modal="true">
+        <p class="orama-modal-message">${escapeHtml(title)}<br><span class="subtle">${escapeHtml(subtitle)}</span></p>
+        <form id="staff-pin-form">
+          <div class="field-group">
+            <label for="staff-nombre">Nombre</label>
+            <input type="text" id="staff-nombre" class="search" required>
+          </div>
+          <div class="field-group">
+            <label for="staff-pin">PIN</label>
+            <input type="password" id="staff-pin" class="search" inputmode="numeric" maxlength="10" required>
+          </div>
+          <div class="orama-modal-actions">
+            <button type="button" class="button" id="staff-pin-cancel">Cancelar</button>
+            <button type="submit" class="button" id="staff-pin-ok">OK</button>
+          </div>
+        </form>
+      </div>
+    `;
     document.body.appendChild(overlay);
 
     const form = overlay.querySelector('#staff-pin-form');
-    const onKey = (event) => { if (event.key === 'Escape') close(null); };
-    function close(value) {
-      document.removeEventListener('keydown', onKey);
-      overlay.remove();
-      resolve(value);
-    }
+    const cancelBtn = overlay.querySelector('#staff-pin-cancel');
+    const nombreInput = overlay.querySelector('#staff-nombre');
+    const pinInput = overlay.querySelector('#staff-pin');
 
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const nombre = document.getElementById('staff-nombre').value.trim();
-      const pin = document.getElementById('staff-pin').value;
-      close(nombre && pin ? { nombre, pin } : null);
-    });
-    overlay.querySelector('[data-ui="cancel"]').addEventListener('click', () => close(null));
-    overlay.addEventListener('click', (event) => { if (event.target === overlay) close(null); });
-    document.addEventListener('keydown', onKey);
+    const cleanup = () => { overlay.remove(); };
 
-    document.getElementById('staff-nombre').focus();
+    const onSubmit = (e) => {
+      e.preventDefault();
+      const nombre = nombreInput.value.trim();
+      const pin = pinInput.value;
+      cleanup();
+      if (nombre && pin) {
+        resolve({ nombre, pin });
+      } else {
+        reject(new Error('Nombre y PIN son requeridos'));
+      }
+    };
+
+    const onCancel = () => {
+      cleanup();
+      reject(new Error('Cancelled'));
+    };
+
+    form.addEventListener('submit', onSubmit);
+    cancelBtn.addEventListener('click', onCancel);
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) onCancel(); });
+
+    nombreInput.focus();
   });
-}
-
-async function mainMenu() {
-  app.innerHTML = pageHead(
-    'Orama POS',
-    'Menú Principal',
-    'Seleccione una opción para comenzar',
-    '/images/cafe-ambiance.jpg'
-  ) + `
-    <section class="menu-grid">
-      <button type="button" class="menu-button" data-feature="dashboard">
-        <div class="menu-icon" aria-hidden="true">📊</div>
-        <div class="menu-text">
-          <h3>Control de Hoy</h3>
-          <p>Resumen diario de ventas e inventario</p>
-        </div>
-      </button>
-      <button type="button" class="menu-button" data-feature="mesas">
-        <div class="menu-icon" aria-hidden="true">🪑</div>
-        <div class="menu-text">
-          <h3>Gestión de Mesas</h3>
-          <p>Estado en tiempo real de las mesas</p>
-        </div>
-      </button>
-      <button type="button" class="menu-button" data-feature="ordenes">
-        <div class="menu-icon" aria-hidden="true">📋</div>
-        <div class="menu-text">
-          <h3>Órdenes</h3>
-          <p>Seguimiento de ventas y cobros</p>
-        </div>
-      </button>
-      <button type="button" class="menu-button" data-feature="staff">
-        <div class="menu-icon" aria-hidden="true">𑑂</div>
-        <div class="menu-text">
-          <h3>Staff</h3>
-          <p>Control de asistencia y personal</p>
-        </div>
-      </button>
-      <button type="button" class="menu-button" data-feature="nomina">
-        <div class="menu-icon" aria-hidden="true">💰</div>
-        <div class="menu-text">
-          <h3>Nómina</h3>
-          <p>Gestión de tiempo y pagos</p>
-        </div>
-      </button>
-      <button type="button" class="menu-button" data-feature="pricing">
-        <div class="menu-icon" aria-hidden="true">🧮</div>
-        <div class="menu-text">
-          <h3>Calculadora de Precios</h3>
-          <p>Análisis de costos y márgenes</p>
-        </div>
-      </button>
-    </section>
-  `;
-
-  // Feature buttons navigate via the hash so orama-router.js owns the render
-  // (keeps nav highlighting, the back button, and router error handling
-  // consistent with every other page instead of writing to #app directly).
-  document.querySelectorAll('.menu-button[data-feature]').forEach(button => {
-    button.addEventListener('click', () => {
-      window.location.hash = `#${button.dataset.feature}`;
-    });
-  });
-}
-
-// Landing screen: register mainMenu as a real route and, if the app opens
-// with no route in the URL, send it there instead of the dashboard default.
-// Setting the hash (rather than rendering into #app directly, like this used
-// to) lets orama-router.js's own window.render() own the actual render —
-// this runs before that first render (script order in index.html), so there
-// is no more DOMContentLoaded race stomping whatever route had just loaded.
-Orama.routes['menu-principal'] = mainMenu;
-if (typeof window !== 'undefined' && !window.location.hash) {
-  window.location.hash = '#menu-principal';
 }
 
 async function dashboard() {
@@ -555,9 +492,12 @@ async function staff() {
 
 async function nomina() {
   // Check if user is management via PIN
-  const auth = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
-  if (!auth) return; // cancelled — no error toast needed
-  const { nombre, pin } = auth;
+  const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
+
+  if (!nombre || !pin) {
+    Orama.toast('Acceso denegado', 'error');
+    return;
+  }
 
   try {
     // Verify staff is management
@@ -576,7 +516,7 @@ async function nomina() {
     const staffList = staffResponse.staff || [];
 
     // Get weekly payroll data
-    const payrollResponse = await api('/api/payroll/weekly');
+    const payrollResponse = await api('/api/staff/payroll/weekly');
     const payrollData = payrollResponse.payroll || [];
 
     app.innerHTML += `
@@ -586,6 +526,7 @@ async function nomina() {
           <button class="tab" data-tab="rates">Tarifas</button>
           <button class="tab" data-tab="payroll">Nómina</button>
           <button class="tab" data-tab="tips">Propinas</button>
+          <button class="tab" data-tab="corregir">Corregir Marcaciones</button>
         </div>
         <div class="tab-content" id="clock-tab">
           <h3>Marcación de Entrada/Salida</h3>
@@ -640,8 +581,8 @@ async function nomina() {
           <h3>Resumen Semanal de Nómina</h3>
           ${payrollData.length > 0 ? `
             <div class="payroll-summary">
-              <p><strong>Total nómina semanal:</strong> ${money.format(payrollResponse.summary.totalPayroll)}</p>
-              <p><strong>Promedio por empleado:</strong> ${money.format(payrollResponse.summary.averageWeeklyEarnings)}</p>
+              <p><strong>Total nómina semanal:</strong> $${payrollResponse.summary.totalPayroll.toFixed(2)} MXN</p>
+              <p><strong>Promedio por empleado:</strong> $${payrollResponse.summary.averageWeeklyEarnings.toFixed(2)} MXN</p>
               <p><strong>Empleados activos:</strong> ${payrollResponse.summary.totalStaff}</p>
             </div>
             <table class="payroll-table">
@@ -659,9 +600,9 @@ async function nomina() {
                   <tr>
                     <td><span class="avatar">${escapeHtml(p.nombre).charAt(0).toUpperCase()}</span> ${escapeHtml(p.nombre)}</td>
                     <td>${escapeHtml(p.tipo)}</td>
-                    <td>${money.format(p.hourly_rate)}</td>
+                    <td>$${p.hourly_rate.toFixed(2)} MXN</td>
                     <td>${p.weeklyHours.toFixed(2)} hrs</td>
-                    <td>${money.format(p.weeklyEarnings)}</td>
+                    <td>$${p.weeklyEarnings.toFixed(2)} MXN</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -690,6 +631,26 @@ async function nomina() {
           </div>
           <button class="button primary" id="calculate-tips-btn">Calcular Distribución</button>
           <div id="tips-results" class="mt-4"></div>
+        </div>
+        <div class="tab-content" id="corregir-tab" style="display:none">
+          <h3>Corregir Marcaciones</h3>
+          <p class="subtle">Corrige entradas, salidas o descansos si alguien olvidó marcar o se equivocó. Últimos 7 días.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Empleado</th>
+                  <th>Entrada</th>
+                  <th>Salida</th>
+                  <th>Descanso (min)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="corregir-tbody">
+                <tr><td colspan="5" class="empty">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     `;
@@ -851,15 +812,15 @@ async function nomina() {
 
           if (response.success) {
             let resultsHTML = `<h4>Resultado de la distribución:</h4>`;
-            resultsHTML += `<p><strong>Total propinas:</strong> ${money.format(response.tipsAmount)}</p>`;
+            resultsHTML += `<p><strong>Total propinas:</strong> $${response.tipsAmount.toFixed(2)} MXN</p>`;
             resultsHTML += `<p><strong>Método:</strong> ${response.distributionType}</p>`;
-            resultsHTML += `<p><strong>Distribuido:</strong> ${money.format(response.summary.totalDistributed)}</p>`;
+            resultsHTML += `<p><strong>Distribuido:</strong> $${response.summary.totalDistributed.toFixed(2)} MXN</p>`;
             if (response.summary.remainingTips > 0) {
-              resultsHTML += `<p><strong>Restante:</strong> ${money.format(response.summary.remainingTips)}</p>`;
+              resultsHTML += `<p><strong>Restante:</strong> $${response.summary.remainingTips.toFixed(2)} MXN</p>`;
             }
             resultsHTML += `<div class="mt-3"><strong>Distribución por empleado:</strong><ul>`;
             response.distribution.forEach(d => {
-              resultsHTML += `<li><strong>${escapeHtml(d.nombre)}</strong>: ${money.format(d.amount)}`;
+              resultsHTML += `<li><strong>${escapeHtml(d.nombre)}</strong>: $${d.amount.toFixed(2)} MXN`;
               if (d.hoursWorked !== undefined) {
                 resultsHTML += ` (${d.hoursWorked.toFixed(2)} hrs)`;
               }
@@ -930,17 +891,114 @@ async function nomina() {
     } catch (error) {
       // Ignore errors in initial load
     }
+
+    await loadCorregirTab(nombre, pin);
   } catch (error) {
     Orama.toast('Error al acceder a nómina: ' + error.message, 'error');
     console.error(error);
   }
 }
 
+function toDatetimeLocalValue(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function loadCorregirTab(nombre, pin) {
+  const tbody = document.getElementById('corregir-tbody');
+  if (!tbody) return;
+
+  try {
+    const response = await api('/api/staff/time-clock/recent');
+    const entries = response.entries || [];
+
+    if (entries.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No hay marcaciones en los últimos 7 días</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = entries.map(entry => `
+      <tr data-entry-id="${entry.id}">
+        <td>${escapeHtml(entry.nombre)}</td>
+        <td><input type="datetime-local" class="correction-clock-in" value="${toDatetimeLocalValue(entry.clock_in)}"></td>
+        <td><input type="datetime-local" class="correction-clock-out" value="${toDatetimeLocalValue(entry.clock_out)}"></td>
+        <td><input type="number" class="correction-break" min="0" step="1" value="${entry.total_break_minutes || 0}"></td>
+        <td>
+          <button class="button small correction-save-btn" data-entry-id="${entry.id}">Guardar</button>
+          <button class="button small danger correction-delete-btn" data-entry-id="${entry.id}">Eliminar</button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('.correction-save-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('tr');
+        const clockInInput = row.querySelector('.correction-clock-in');
+        const clockOutInput = row.querySelector('.correction-clock-out');
+        const breakInput = row.querySelector('.correction-break');
+
+        if (!clockInInput.value) {
+          Orama.toast('La entrada es requerida', 'error');
+          return;
+        }
+
+        btn.disabled = true;
+        try {
+          await api(`/api/staff/time-clock/${btn.dataset.entryId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              clock_in: new Date(clockInInput.value).toISOString(),
+              clock_out: clockOutInput.value ? new Date(clockOutInput.value).toISOString() : null,
+              total_break_minutes: parseInt(breakInput.value, 10) || 0,
+              nombre,
+              pin
+            })
+          });
+          Orama.toast('Marcación corregida', 'success');
+        } catch (error) {
+          Orama.toast('Error al corregir: ' + error.message, 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+
+    tbody.querySelectorAll('.correction-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('¿Eliminar esta marcación? Esta acción no se puede deshacer.')) return;
+        btn.disabled = true;
+        try {
+          await api(`/api/staff/time-clock/${btn.dataset.entryId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombre, pin })
+          });
+          btn.closest('tr').remove();
+          Orama.toast('Marcación eliminada', 'success');
+        } catch (error) {
+          Orama.toast('Error al eliminar: ' + error.message, 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+  } catch (error) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Error al cargar marcaciones</td></tr>';
+    console.error(error);
+  }
+}
+
 async function pricing() {
   // Check if user is management via PIN
-  const auth = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
-  if (!auth) return; // cancelled — no error toast needed
-  const { nombre, pin } = auth;
+  const { nombre, pin } = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
+
+  if (!nombre || !pin) {
+    Orama.toast('Acceso denegado', 'error');
+    return;
+  }
 
   try {
     // Verify staff is management
@@ -971,17 +1029,42 @@ async function pricing() {
             <input type="text" id="newProductName" placeholder="Nombre del producto">
           </div>
           <div class="form-section">
-            <label>Ingredientes:</label>
+            <label>Insumos usados y cantidad (costo por kg/litro/pieza según la unidad elegida):</label>
             <div id="ingredientsContainer">
               <div class="ingredient-row">
-                <input type="text" class="ingredient-name" placeholder="Nombre del ingrediente">
-                <input type="number" class="quantity" placeholder="Cantidad" step="0.01" min="0">
-                <input type="text" class="unit" placeholder="Unidad" value="pieza">
-                <input type="number" class="unit-cost" placeholder="Costo unitario" step="0.01" min="0">
+                <input type="text" class="ingredient-name" placeholder="Nombre del insumo">
+                <input type="number" class="quantity" placeholder="Cantidad usada" step="0.01" min="0">
+                <input type="text" class="unit" placeholder="Unidad (kg, litro, g, ml, pieza)" value="pieza">
+                <input type="number" class="unit-cost" placeholder="Costo por kg/litro/pieza" step="0.01" min="0">
                 <button class="button small" type="button" onclick="removeIngredient(this)">-</button>
               </div>
             </div>
-            <button class="button secondary" type="button" onclick="addIngredientField()">+ Agregar ingrediente</button>
+            <button class="button secondary" type="button" onclick="addIngredientField()">+ Agregar insumo</button>
+            <p class="subtle">Ejemplo: si el café cuesta $220 por kg y usas 20g, pon Unidad = "kg" y Cantidad usada = 0.02 (20g = 0.02kg).</p>
+          </div>
+          <div class="form-section">
+            <label>Tiempo de preparación y mano de obra:</label>
+            <div class="cost-grid">
+              <div>
+                <label>Tiempo de preparación (minutos):</label>
+                <input type="number" id="prepTimeMinutes" step="1" min="0" value="0">
+              </div>
+              <div>
+                <label>Rendimiento (porciones que produce esa preparación):</label>
+                <input type="number" id="yieldServings" step="1" min="1" value="1">
+              </div>
+              <div>
+                <label>Tarifa de mano de obra (MXN/hora):</label>
+                <input type="number" id="laborRatePerHour" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>O usar tarifa de un empleado:</label>
+                <select id="laborStaffSelect">
+                  <option value="">-- Escribir tarifa manualmente --</option>
+                </select>
+              </div>
+            </div>
+            <p class="subtle">Costo de mano de obra = (minutos ÷ 60 × tarifa por hora) ÷ rendimiento. Ej: 20 min a $120/hora entre 10 porciones = $4.00 por porción.</p>
           </div>
           <div class="form-section">
             <label>Costos extra por unidad:</label>
@@ -991,12 +1074,33 @@ async function pricing() {
                 <input type="number" id="extraPackaging" step="0.01" min="0" value="0">
               </div>
               <div>
-                <label>Mano de obra (MXN):</label>
-                <input type="number" id="extraLabor" step="0.01" min="0" value="0">
-              </div>
-              <div>
                 <label>Otros (MXN):</label>
                 <input type="number" id="extraOther" step="0.01" min="0" value="0">
+              </div>
+            </div>
+          </div>
+          <div class="form-section">
+            <label>Costos fijos mensuales (para el precio de costo completo):</label>
+            <div class="cost-grid">
+              <div>
+                <label>Renta (MXN):</label>
+                <input type="number" id="fixedRent" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>Teléfono/Internet (MXN):</label>
+                <input type="number" id="fixedPhone" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>Nómina fija (MXN):</label>
+                <input type="number" id="fixedPayroll" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>Otros fijos (MXN):</label>
+                <input type="number" id="fixedOther" step="0.01" min="0" value="0">
+              </div>
+              <div>
+                <label>Unidades vendidas al mes (estimado):</label>
+                <input type="number" id="estimatedMonthlyUnits" step="1" min="0" value="0">
               </div>
             </div>
           </div>
@@ -1037,6 +1141,25 @@ async function pricing() {
       console.error('Error loading products:', error);
     }
 
+    // Load staff hourly rates for the labor rate picker
+    try {
+      const staffResponse = await api('/api/staff');
+      const laborStaffSelect = document.getElementById('laborStaffSelect');
+      (staffResponse.staff || []).filter((s) => s.activo).forEach((s) => {
+        const option = document.createElement('option');
+        option.value = s.hourly_rate || 0;
+        option.textContent = `${s.nombre} - $${(s.hourly_rate || 0).toFixed(2)}/hora`;
+        laborStaffSelect.appendChild(option);
+      });
+      laborStaffSelect.addEventListener('change', () => {
+        if (laborStaffSelect.value !== '') {
+          document.getElementById('laborRatePerHour').value = laborStaffSelect.value;
+        }
+      });
+    } catch (error) {
+      console.error('Error loading staff rates:', error);
+    }
+
     // Add event listeners
     document.getElementById('calculatePriceBtn').addEventListener('click', calculatePrice);
     document.getElementById('loadRecipesBtn').addEventListener('click', loadSavedRecipes);
@@ -1046,6 +1169,12 @@ async function pricing() {
       addIngredientField();
     }
 
+    // Remember monthly fixed costs between visits (rent/phone/payroll rarely change)
+    restoreFixedCostInputs();
+    ['fixedRent', 'fixedPhone', 'fixedPayroll', 'fixedOther', 'estimatedMonthlyUnits', 'laborRatePerHour'].forEach((id) => {
+      document.getElementById(id).addEventListener('change', saveFixedCostInputs);
+    });
+
   } catch (error) {
     Orama.toast('Error al acceder a la calculadora: ' + error.message, 'error');
     console.error(error);
@@ -1053,6 +1182,35 @@ async function pricing() {
 }
 
 // Helper functions for the pricing interface
+const FIXED_COST_STORAGE_KEY = 'orama-pricing-fixed-costs';
+
+function saveFixedCostInputs() {
+  try {
+    localStorage.setItem(FIXED_COST_STORAGE_KEY, JSON.stringify({
+      fixedRent: document.getElementById('fixedRent').value,
+      fixedPhone: document.getElementById('fixedPhone').value,
+      fixedPayroll: document.getElementById('fixedPayroll').value,
+      fixedOther: document.getElementById('fixedOther').value,
+      estimatedMonthlyUnits: document.getElementById('estimatedMonthlyUnits').value,
+      laborRatePerHour: document.getElementById('laborRatePerHour').value
+    }));
+  } catch (error) {
+    // localStorage unavailable (private mode, etc.) - not critical
+  }
+}
+
+function restoreFixedCostInputs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FIXED_COST_STORAGE_KEY) || '{}');
+    Object.keys(saved).forEach((id) => {
+      const input = document.getElementById(id);
+      if (input && saved[id] !== undefined) input.value = saved[id];
+    });
+  } catch (error) {
+    // Ignore corrupted/missing stored values
+  }
+}
+
 function addIngredientField() {
   const container = document.getElementById('ingredientsContainer');
   const row = document.createElement('div');
@@ -1078,7 +1236,7 @@ async function calculatePrice() {
   try {
     const btn = document.getElementById('calculatePriceBtn');
     btn.disabled = true;
-    btn.textContent = 'Calculando…';
+    btn.textContent = 'Calculando...';
 
     const productId = document.getElementById('productSelect').value;
     const productName = document.getElementById('newProductName').value.trim();
@@ -1121,8 +1279,8 @@ async function calculatePrice() {
         quantityInput.style.borderColor = '';
       }
 
-      if (!ingredients.some(ing => ing.name === name && ing.unit === unit)) {
-        ingredients.push({ name, quantity, unit, unitCost });
+      if (!ingredients.some(ing => ing.ingredientName === name && ing.unit === unit)) {
+        ingredients.push({ ingredientName: name, quantityPerServing: quantity, unit, unitCost });
       }
     });
 
@@ -1133,9 +1291,24 @@ async function calculatePrice() {
 
     const extraCosts = {
       packaging: parseFloat(document.getElementById('extraPackaging').value) || 0,
-      labor: parseFloat(document.getElementById('extraLabor').value) || 0,
       other: parseFloat(document.getElementById('extraOther').value) || 0
     };
+
+    const preparation = {
+      prepTimeMinutes: parseFloat(document.getElementById('prepTimeMinutes').value) || 0,
+      yieldServings: parseFloat(document.getElementById('yieldServings').value) || 1,
+      laborRatePerHour: parseFloat(document.getElementById('laborRatePerHour').value) || 0
+    };
+
+    const fixedCosts = {
+      rent: parseFloat(document.getElementById('fixedRent').value) || 0,
+      phoneInternet: parseFloat(document.getElementById('fixedPhone').value) || 0,
+      payroll: parseFloat(document.getElementById('fixedPayroll').value) || 0,
+      other: parseFloat(document.getElementById('fixedOther').value) || 0
+    };
+    const estimatedMonthlyUnits = parseFloat(document.getElementById('estimatedMonthlyUnits').value) || 0;
+
+    saveFixedCostInputs();
 
     // Call API to calculate price
     const response = await api('/api/pricing/calculate', {
@@ -1146,6 +1319,9 @@ async function calculatePrice() {
         productName: productName || undefined,
         ingredients,
         extraCosts,
+        preparation,
+        fixedCosts,
+        estimatedMonthlyUnits: estimatedMonthlyUnits > 0 ? estimatedMonthlyUnits : undefined,
         targetMargin,
         includeIVA
       })
@@ -1186,19 +1362,19 @@ function showResults(result) {
     <div class="results-grid">
       <div>
         <label>Costo total por porción:</label>
-        <p class="price-label">${money.format(result.totalCostPerServing)}</p>
+        <p class="price-label">$${result.totalCostPerServing.toFixed(2)} MXN</p>
       </div>
       <div>
         <label>Precio de venta sugerido:</label>
-        <p class="price-label">${money.format(result.suggestedSellingPrice)}</p>
+        <p class="price-label">$${result.suggestedSellingPrice.toFixed(2)} MXN</p>
       </div>
       <div>
         <label>Precio con IVA:</label>
-        <p class="price-label">${money.format(result.priceWithIVA)}</p>
+        <p class="price-label">$${result.priceWithIVA.toFixed(2)} MXN</p>
       </div>
       <div>
         <label>Precio sin IVA:</label>
-        <p class="price-label">${money.format(result.priceWithoutIVA)}</p>
+        <p class="price-label">$${result.priceWithoutIVA.toFixed(2)} MXN</p>
       </div>
       <div>
         <label>Margen actual:</label>
@@ -1214,9 +1390,60 @@ function showResults(result) {
       </div>
       <div>
         <label>Diferencia:</label>
-        <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}${money.format(result.savingsOrShortfall)}</p>
+        <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}$${result.savingsOrShortfall.toFixed(2)} MXN</p>
       </div>
     </div>
+
+    <h3 class="mt-4">Costo primo (Prime Cost)</h3>
+    <p class="subtle">Insumos + embalaje + mano de obra, el indicador más usado en restaurantes/cafés. Para un negocio de servicio limitado como una cafetería, mantenerlo en 60% o menos del precio de venta.</p>
+    <div class="results-grid">
+      <div>
+        <label>Costo de insumos:</label>
+        <p class="price-label">$${result.ingredientsCost.toFixed(2)} MXN</p>
+      </div>
+      <div>
+        <label>Costo de embalaje:</label>
+        <p class="price-label">$${result.packagingCost.toFixed(2)} MXN</p>
+      </div>
+      <div>
+        <label>Costo de mano de obra:</label>
+        <p class="price-label">$${result.laborCostPerServing.toFixed(2)} MXN</p>
+      </div>
+      <div>
+        <label>Costo primo total:</label>
+        <p class="price-label">$${result.primeCost.toFixed(2)} MXN</p>
+      </div>
+      <div class="${result.primeCostPercent > 60 ? 'alert' : 'success'}">
+        <label>Costo primo (% del precio de venta):</label>
+        <p class="price-label">${result.primeCostPercent.toFixed(1)}%</p>
+      </div>
+    </div>
+
+    ${result.fullCostSellingPrice !== null && result.fullCostSellingPrice !== undefined ? `
+      <h3 class="mt-4">Precio de costo completo (incluye renta, teléfono y nómina fija)</h3>
+      <p class="subtle">Costos fijos mensuales: $${result.totalMonthlyFixedCosts.toFixed(2)} MXN ÷ ${result.estimatedMonthlyUnits} unidades/mes = $${result.fixedCostPerUnit.toFixed(2)} MXN de costo fijo por unidad</p>
+      <div class="results-grid">
+        <div>
+          <label>Costo completo por porción:</label>
+          <p class="price-label">$${result.fullCostPerServing.toFixed(2)} MXN</p>
+        </div>
+        <div>
+          <label>Precio sugerido (costo completo):</label>
+          <p class="price-label">$${result.fullCostSellingPrice.toFixed(2)} MXN</p>
+        </div>
+        <div>
+          <label>Precio con IVA (costo completo):</label>
+          <p class="price-label">$${result.fullCostPriceWithIVA.toFixed(2)} MXN</p>
+        </div>
+        <div>
+          <label>Punto de equilibrio:</label>
+          <p class="price-label">${result.breakEvenUnits !== null ? `${result.breakEvenUnits} unidades/mes` : 'N/A'}</p>
+        </div>
+      </div>
+      <p class="subtle">A este precio, este producto cubre ingredientes, costos extra y su parte de renta/teléfono/nómina fija. El "precio de venta sugerido" de arriba solo cubre el costo de los ingredientes.</p>
+    ` : `
+      <p class="empty mt-4">Agrega renta, teléfono, nómina fija y las unidades estimadas por mes arriba para ver el precio que cubre también los costos fijos del negocio, no solo los ingredientes.</p>
+    `}
 
     <div class="form-section">
       <button class="button secondary" onclick="saveAsRecipe()">Guardar como receta</button>
@@ -1228,7 +1455,7 @@ async function saveAsRecipe() {
   try {
     const btn = document.querySelector('.results-section .button.secondary');
     btn.disabled = true;
-    btn.textContent = 'Guardando…';
+    btn.textContent = 'Guardando...';
 
     const productId = document.getElementById('productSelect').value;
     const productName = document.getElementById('newProductName').value.trim();
@@ -1287,7 +1514,7 @@ async function loadSavedRecipes() {
   try {
     const btn = document.getElementById('loadRecipesBtn');
     btn.disabled = true;
-    btn.textContent = 'Cargando…';
+    btn.textContent = 'Cargando...';
 
     // TODO: Implement loading saved recipes from API
     // For now, show placeholder

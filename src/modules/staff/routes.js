@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../../config/database');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { validate } = require('../../middleware/validate');
-const { clockPayloadSchema } = require('./schemas');
+const { clockPayloadSchema, timeClockEditSchema } = require('./schemas');
 const staffService = require('./service');
 
 const router = express.Router();
@@ -22,8 +22,9 @@ const verifyAdmin = async (req, res, next) => {
 // GET all staff (for frontend staff management interfaces)
 router.get('/staff', async (_req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, nombre, tipo, idioma, activo, created_at FROM staff ORDER BY id ASC');
-    res.json({ success: true, staff: rows });
+    const { rows } = await pool.query('SELECT id, nombre, tipo, idioma, activo, hourly_rate, created_at FROM staff ORDER BY id ASC');
+    const staff = rows.map((row) => ({ ...row, hourly_rate: parseFloat(row.hourly_rate) || 0 }));
+    res.json({ success: true, staff });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -207,6 +208,53 @@ router.post('/staff/time-clock/break-end', verifyAdmin, async (req, res) => {
   });
 });
 
+// List recent time_clock entries across all staff, for manual correction
+// (someone forgot to clock out, wrong time, double-clicked, etc.)
+router.get('/staff/time-clock/recent', async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT tc.id, tc.staff_id, s.nombre, tc.clock_in, tc.clock_out, tc.total_break_minutes
+     FROM time_clock tc
+     JOIN staff s ON s.id = tc.staff_id
+     WHERE tc.clock_in >= CURRENT_DATE - INTERVAL '6 days'
+       AND tc.clock_in < CURRENT_DATE + INTERVAL '1 day'
+     ORDER BY tc.clock_in DESC`
+  );
+  res.json({ success: true, entries: rows });
+});
+
+// Correct a time_clock entry (admin-only)
+router.put('/staff/time-clock/:id', verifyAdmin, validate(timeClockEditSchema), async (req, res) => {
+  const { id } = req.params;
+  const { clock_in, clock_out, total_break_minutes } = req.body;
+
+  if (clock_out && new Date(clock_out) <= new Date(clock_in)) {
+    return res.status(400).json({ success: false, error: 'La salida debe ser después de la entrada' });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE time_clock
+     SET clock_in = $1, clock_out = $2, total_break_minutes = $3
+     WHERE id = $4
+     RETURNING id, staff_id, clock_in, clock_out, total_break_minutes`,
+    [clock_in, clock_out || null, total_break_minutes, id]
+  );
+
+  if (!rows[0]) {
+    return res.status(404).json({ success: false, error: 'Registro no encontrado' });
+  }
+  res.json({ success: true, entry: rows[0] });
+});
+
+// Delete a mistaken time_clock entry, e.g. a double clock-in (admin-only)
+router.delete('/staff/time-clock/:id', verifyAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { rows } = await pool.query('DELETE FROM time_clock WHERE id = $1 RETURNING id', [id]);
+  if (!rows[0]) {
+    return res.status(404).json({ success: false, error: 'Registro no encontrado' });
+  }
+  res.json({ success: true });
+});
+
 // Hourly rate endpoints
 router.post('/staff/:staffId/hourly-rate', verifyAdmin, async (req, res) => {
   const { staffId } = req.params;
@@ -303,7 +351,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
        break_end,
        total_break_minutes,
        EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600 as hours_worked_raw,
-       (EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0) as hours_worked
+       ((EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0))::float8 as hours_worked
      FROM time_clock
      WHERE staff_id = $1
        AND clock_in >= CURRENT_DATE - INTERVAL '6 days'
@@ -313,10 +361,13 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
     [staffId]
   );
 
-  // Calculate totals
-  const totalHours = timeClockRows.reduce((sum, day) => sum + (day.hours_worked || 0), 0);
-  const totalEarnings = totalHours * (staffRows[0].hourly_rate || 0);
-  const daysWorked = timeClockRows.filter(day => day.hours_worked > 0).length;
+  // Calculate totals (hours_worked/hourly_rate come back from Postgres as
+  // numeric strings, not JS numbers - coerce explicitly rather than relying
+  // on the SQL cast alone)
+  const staffHourlyRate = parseFloat(staffRows[0].hourly_rate) || 0;
+  const totalHours = timeClockRows.reduce((sum, day) => sum + (Number(day.hours_worked) || 0), 0);
+  const totalEarnings = totalHours * staffHourlyRate;
+  const daysWorked = timeClockRows.filter(day => Number(day.hours_worked) > 0).length;
 
   res.json({
     success: true,
@@ -324,7 +375,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
       id: staffRows[0].id,
       nombre: staffRows[0].nombre,
       tipo: staffRows[0].tipo,
-      hourly_rate: staffRows[0].hourly_rate || 0.00
+      hourly_rate: staffHourlyRate
     },
     weekSummary: {
       totalHours: parseFloat(totalHours.toFixed(2)),
@@ -332,7 +383,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
       daysWorked,
       dailyDetails: timeClockRows.map(day => ({
         date: day.clock_in.toISOString().split('T')[0],
-        hoursWorked: parseFloat((day.hours_worked || 0).toFixed(2)),
+        hoursWorked: parseFloat((Number(day.hours_worked) || 0).toFixed(2)),
         clockIn: day.clock_in.toISOString(),
         clockOut: day.clock_out ? day.clock_out.toISOString() : null,
         breakMinutes: day.total_break_minutes || 0
@@ -342,7 +393,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
 });
 
 // Payroll endpoints
-router.get('/staff/payroll/weekly', verifyAdmin, async (req, res) => {
+router.get('/staff/payroll/weekly', async (req, res) => {
   // Get all staff with their weekly summaries
   const { rows: staffRows } = await pool.query(
     'SELECT id, nombre, tipo, hourly_rate FROM staff WHERE activo = 1 ORDER BY nombre'
@@ -356,7 +407,7 @@ router.get('/staff/payroll/weekly', verifyAdmin, async (req, res) => {
     const { rows: timeClockRows } = await pool.query(
       `SELECT
          EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600 as hours_worked_raw,
-         (EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0) as hours_worked
+         ((EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0))::float8 as hours_worked
        FROM time_clock
        WHERE staff_id = $1
          AND clock_in >= CURRENT_DATE - INTERVAL '6 days'
@@ -365,15 +416,16 @@ router.get('/staff/payroll/weekly', verifyAdmin, async (req, res) => {
       [staff.id]
     );
 
-    const totalHours = timeClockRows.reduce((sum, day) => sum + (day.hours_worked || 0), 0);
-    const totalEarnings = totalHours * (staff.hourly_rate || 0);
+    const hourlyRate = parseFloat(staff.hourly_rate) || 0;
+    const totalHours = timeClockRows.reduce((sum, day) => sum + (Number(day.hours_worked) || 0), 0);
+    const totalEarnings = totalHours * hourlyRate;
     totalPayroll += totalEarnings;
 
     staffPayroll.push({
       id: staff.id,
       nombre: staff.nombre,
       tipo: staff.tipo,
-      hourly_rate: staff.hourly_rate || 0.00,
+      hourly_rate: hourlyRate,
       weeklyHours: parseFloat(totalHours.toFixed(2)),
       weeklyEarnings: parseFloat(totalEarnings.toFixed(2))
     });
