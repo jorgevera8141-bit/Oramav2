@@ -484,7 +484,7 @@ async function staff() {
 async function nomina() {
   // Check if user is management via PIN
   const auth = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
-  if (!auth) return; // cancelled — no error toast needed
+  if (!auth) { window.location.hash = '#dashboard'; return; } // cancelled — back to the dashboard instead of a stuck loading spinner
   const { nombre, pin } = auth;
 
   try {
@@ -982,7 +982,7 @@ async function loadCorregirTab(nombre, pin) {
 async function pricing() {
   // Check if user is management via PIN
   const auth = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
-  if (!auth) return; // cancelled — no error toast needed
+  if (!auth) { window.location.hash = '#dashboard'; return; } // cancelled — back to the dashboard instead of a stuck loading spinner
   const { nombre, pin } = auth;
 
   try {
