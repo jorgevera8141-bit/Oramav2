@@ -13,6 +13,7 @@ const GENERIC_UNIT_KEY = 'H87'; // SAT c_ClaveUnidad "Pieza"
 // Standard Mexican generic/public receptor for "factura global" (no real customer data).
 const PUBLICO_GENERAL = { legal_name: 'PUBLICO EN GENERAL', tax_id: 'XAXX010101000', tax_system: '616' };
 const BUSINESS_ZIP = '20000'; // Café Rosinal, Aguascalientes - used as the receptor zip for factura global only
+const STAMP_TIMEOUT_MS = 30_000;
 
 function requestJson(method, path, body, apiKey) {
   return new Promise((resolve, reject) => {
@@ -29,6 +30,7 @@ function requestJson(method, path, body, apiKey) {
         });
       }
     );
+    req.setTimeout(STAMP_TIMEOUT_MS, () => req.destroy(new Error('Facturapi request timed out')));
     req.on('error', reject);
     if (data) req.write(data);
     req.end();
@@ -59,11 +61,16 @@ function mapItemsToFacturapi(rows) {
   }));
 }
 
-async function buildInvoiceItems(ordenId) {
-  const { rows } = await pool.query(
+async function buildInvoiceItems(ordenId, db = pool) {
+  // Join by menu_item_id; only rows saved before that column existed fall back to the
+  // name, picking a single menu item so a duplicated name can't repeat invoice lines.
+  const { rows } = await db.query(
     `SELECT oi.item_nombre, oi.precio, oi.cantidad, mi.clave_sat
      FROM orden_items oi
-     LEFT JOIN menu_items mi ON mi.nombre = oi.item_nombre
+     LEFT JOIN menu_items mi ON mi.id = COALESCE(
+       oi.menu_item_id,
+       (SELECT m2.id FROM menu_items m2 WHERE m2.nombre = oi.item_nombre ORDER BY m2.id LIMIT 1)
+     )
      WHERE oi.orden_id = $1`,
     [ordenId]
   );
@@ -89,16 +96,27 @@ function resolvePaymentForm(order, data) {
   return '99'; // SAT "Por definir" - honest fallback for mixto/cortesia/cliente_frecuente
 }
 
-async function createInvoice(data) {
+function invoiceError(message, statusCode) {
+  return Object.assign(new Error(message), { statusCode });
+}
+
+// A stamped CFDI is a legal document that cannot be undone from here, so the order is
+// claimed (a 'pendiente' row, protected by the unique index on orden_id) BEFORE calling
+// Facturapi. A second or concurrent request then finds the claim and never stamps again.
+//   - Facturapi answers with an error  -> nothing was stamped: release the claim.
+//   - Facturapi can't be reached/times out -> the outcome is unknown: keep the claim so
+//     nobody blindly retries; someone has to check Facturapi first.
+// Returns { invoice, created }; created is false when the order was already invoiced.
+async function createInvoice(data, { db = pool, request = requestJson } = {}) {
   const apiKey = process.env.FACTURAPI_KEY;
-  if (!apiKey) throw Object.assign(new Error('Facturación no está configurada (falta FACTURAPI_KEY)'), { statusCode: 503 });
+  if (!apiKey) throw invoiceError('Facturación no está configurada (falta FACTURAPI_KEY)', 503);
 
-  const { rows: ordenRows } = await pool.query('SELECT * FROM ordenes WHERE id = $1', [data.orden_id]);
+  const { rows: ordenRows } = await db.query('SELECT * FROM ordenes WHERE id = $1', [data.orden_id]);
   const orden = ordenRows[0];
-  if (!orden) throw Object.assign(new Error('Orden no encontrada'), { statusCode: 404 });
-  if (orden.status !== 'cerrada') throw Object.assign(new Error('Solo se pueden facturar órdenes cerradas'), { statusCode: 409 });
+  if (!orden) throw invoiceError('Orden no encontrada', 404);
+  if (orden.status !== 'cerrada') throw invoiceError('Solo se pueden facturar órdenes cerradas', 409);
 
-  const items = await buildInvoiceItems(data.orden_id);
+  const items = await buildInvoiceItems(data.orden_id, db);
   const customer = buildCustomer(data);
   const payload = {
     customer,
@@ -108,18 +126,38 @@ async function createInvoice(data) {
     payment_method: 'PUE'
   };
 
-  const result = await requestJson('POST', '/invoices', payload, apiKey);
-  if (result.statusCode < 200 || result.statusCode >= 300) {
-    const message = result.body?.message || result.body?.errors?.[0]?.message || 'Facturapi no pudo timbrar la factura';
-    throw Object.assign(new Error(message), { statusCode: 502 });
+  const { rows: claimed } = await db.query(
+    `INSERT INTO orama_facturas (orden_id, rfc_receptor, razon_social, total, status)
+     VALUES ($1,$2,$3,$4,'pendiente')
+     ON CONFLICT (orden_id) DO NOTHING RETURNING *`,
+    [data.orden_id, customer.tax_id, customer.legal_name, orden.total]
+  );
+  const claim = claimed[0];
+  if (!claim) {
+    const { rows: existing } = await db.query('SELECT * FROM orama_facturas WHERE orden_id = $1', [data.orden_id]);
+    if (existing[0]?.status === 'timbrada') return { invoice: existing[0], created: false };
+    throw invoiceError('Esta orden ya tiene una factura en proceso. Revisa Facturapi antes de reintentar.', 409);
   }
 
-  const { rows } = await pool.query(
-    `INSERT INTO orama_facturas (orden_id, folio_fiscal, facturapi_id, rfc_receptor, razon_social, total, status)
-     VALUES ($1,$2,$3,$4,$5,$6,'timbrada') RETURNING *`,
-    [data.orden_id, result.body.uuid || '', result.body.id || '', customer.tax_id, customer.legal_name, orden.total]
+  let result;
+  try {
+    result = await request('POST', '/invoices', payload, apiKey);
+  } catch (error) {
+    console.error('[facturapi] stamp outcome unknown, claim kept for order', data.orden_id, error.message);
+    throw invoiceError('No se pudo confirmar con Facturapi si la factura se timbró. Revisa Facturapi antes de reintentar.', 502);
+  }
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    await db.query("DELETE FROM orama_facturas WHERE id = $1 AND status = 'pendiente'", [claim.id]);
+    const message = result.body?.message || result.body?.errors?.[0]?.message || 'Facturapi no pudo timbrar la factura';
+    throw invoiceError(message, 502);
+  }
+
+  const { rows } = await db.query(
+    `UPDATE orama_facturas SET folio_fiscal = $2, facturapi_id = $3, status = 'timbrada'
+     WHERE id = $1 RETURNING *`,
+    [claim.id, result.body.uuid || '', result.body.id || '']
   );
-  return rows[0];
+  return { invoice: rows[0], created: true };
 }
 
 async function downloadInvoiceFile(facturaId, type) {
