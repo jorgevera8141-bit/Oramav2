@@ -40,9 +40,12 @@ async function cashier() {
     if (currentOverlay) { currentOverlay.remove(); currentOverlay = null; }
   }
 
-  function openPinModal({ title }) {
+  // keepCurrent stacks the PIN prompt over the open modal (a half-finished split payment)
+  // instead of replacing it, and hands that modal back when the prompt closes.
+  function openPinModal({ title, keepCurrent = false }) {
     return new Promise((resolve) => {
-      closeAnyModal();
+      const previousOverlay = keepCurrent ? currentOverlay : null;
+      if (!keepCurrent) closeAnyModal();
       const overlay = document.createElement('div');
       overlay.className = 'orama-overlay';
       overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
@@ -58,7 +61,7 @@ async function cashier() {
       </div>`;
       document.body.appendChild(overlay);
       currentOverlay = overlay;
-      const close = (value) => { overlay.remove(); if (currentOverlay === overlay) currentOverlay = null; resolve(value); };
+      const close = (value) => { overlay.remove(); if (currentOverlay === overlay) currentOverlay = previousOverlay; resolve(value); };
       overlay.addEventListener('click', (event) => { if (event.target === overlay) close(null); });
       overlay.querySelector('[data-ui="cancel"]').addEventListener('click', () => close(null));
       overlay.querySelector('[data-ui="confirm"]').addEventListener('click', () => {
@@ -329,6 +332,11 @@ async function cashier() {
       if (!redeemAuth) return;
     } else {
       notas = document.getElementById('pay-nota')?.value || '';
+      if (method === 'cortesia') {
+        // A cortesia gives product away: a staff PIN authorizes it (and the server logs who).
+        redeemAuth = await openPinModal({ title: 'Autorizar cortesía', keepCurrent: true });
+        if (!redeemAuth) return;
+      }
     }
 
     // openPinModal (above, for cliente_frecuente) already closed the payment modal's
@@ -338,8 +346,8 @@ async function cashier() {
     try {
       const body = { payment_method: method, amount_cash, amount_card, notas };
       if (loyalty && method !== 'cliente_frecuente') body.loyalty_phone = loyalty.customer.phone;
-      if (method === 'cliente_frecuente') {
-        body.loyalty_customer_id = loyalty.customer.id;
+      if (method === 'cliente_frecuente') body.loyalty_customer_id = loyalty.customer.id;
+      if (method === 'cliente_frecuente' || method === 'cortesia') {
         body.actor_nombre = redeemAuth.actor_nombre;
         body.actor_pin = redeemAuth.actor_pin;
       }
@@ -521,7 +529,7 @@ async function cashier() {
       body.innerHTML = `
         <p class="subtle" style="margin:0 0 4px">${escapeHtml(person.name)}</p>
         <p class="orama-modal-message" style="font:700 28px 'JetBrains Mono',monospace;color:var(--cream)">${money.format(subtotal)}</p>
-        <div class="filters" id="split-pay-methods" style="margin-bottom:16px">${PAYMENT_METHODS.map((m) => `<button type="button" class="pill ${m.id === payingMethod ? 'active' : ''}" data-split-method="${m.id}">${m.label}</button>`).join('')}</div>
+        <div class="filters" id="split-pay-methods" style="margin-bottom:16px">${PAYMENT_METHODS.filter((m) => m.id !== 'cliente_frecuente').map((m) => `<button type="button" class="pill ${m.id === payingMethod ? 'active' : ''}" data-split-method="${m.id}">${m.label}</button>`).join('')}</div>
         <div id="pay-fields">${paymentFieldsMarkup(payingMethod, subtotal)}</div>
         <div class="orama-modal-actions">
           <button type="button" class="button" data-split-pay-cancel>Cancelar</button>
@@ -560,7 +568,16 @@ async function cashier() {
       if (button) { button.disabled = true; button.textContent = 'Cerrando…'; }
       try {
         const pagos = persons.map((p) => p.pago).filter(Boolean);
-        await api(`/api/ordenes/${order.id}/cerrar`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pagos }) });
+        const payload = { pagos };
+        if (pagos.some((pago) => pago.payment_method === 'cortesia')) {
+          const auth = await openPinModal({ title: 'Autorizar cortesía', keepCurrent: true });
+          if (!auth) {
+            if (button) { button.disabled = false; button.textContent = 'Cerrar orden completa'; }
+            return;
+          }
+          Object.assign(payload, auth);
+        }
+        await api(`/api/ordenes/${order.id}/cerrar`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         closeAnyModal();
         Orama.toast('Orden dividida cerrada correctamente', 'success');
         await loadActivas();

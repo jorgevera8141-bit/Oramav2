@@ -54,9 +54,30 @@ test('assertValidClosePayment requires efectivo/tarjeta/mixto amounts to cover t
   assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'mixto', amount_cash: 120, amount_card: 0 }), 'tendered cash above the total is fine');
 });
 
-test('assertValidClosePayment leaves cortesia and split-payment closes to their own rules', () => {
-  assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'cortesia' }));
+test('assertValidClosePayment lets ordinary split payments through', () => {
   assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'dividido', pagos: [{ payment_method: 'efectivo', amount_cash: 100 }] }));
+});
+
+test('a cortesia close needs a staff name and PIN, whether it is the whole order or one person in a split', () => {
+  rejects({ payment_method: 'cortesia' }, 400);
+  rejects({ payment_method: 'cortesia', actor_nombre: 'Ana' }, 400);
+  rejects({ pagos: [{ payment_method: 'efectivo', amount_cash: 50 }, { payment_method: 'cortesia' }] }, 400);
+  const authorized = { actor_nombre: 'Ana', actor_pin: '1234' };
+  assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'cortesia', ...authorized }));
+  assert.doesNotThrow(() => assertValidClosePayment(order, { pagos: [{ payment_method: 'efectivo', amount_cash: 50 }, { payment_method: 'cortesia' }], ...authorized }));
+});
+
+test('cliente_frecuente cannot be used as one person of a split payment (nothing would be redeemed)', () => {
+  rejects({ pagos: [{ payment_method: 'cliente_frecuente' }], actor_nombre: 'Ana', actor_pin: '1234' }, 400);
+});
+
+test('requiresCompAuthorization flags cortesia at the top level and inside split payments only', () => {
+  const { requiresCompAuthorization } = require('../src/modules/orders/service');
+  assert.equal(requiresCompAuthorization({ payment_method: 'cortesia' }), true);
+  assert.equal(requiresCompAuthorization({ pagos: [{ payment_method: 'tarjeta' }, { payment_method: 'cortesia' }] }), true);
+  assert.equal(requiresCompAuthorization({ payment_method: 'efectivo' }), false);
+  assert.equal(requiresCompAuthorization({ pagos: [{ payment_method: 'mixto' }] }), false);
+  assert.equal(requiresCompAuthorization({}), false);
 });
 
 const { deductInventoryForOrder, cancelOrder } = require('../src/modules/orders/service');

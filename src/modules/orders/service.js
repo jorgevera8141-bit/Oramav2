@@ -1,6 +1,7 @@
 const pool = require('../../config/database');
 const { notify } = require('../../shared/ntfy');
 const { verifyStaffPin } = require('../../shared/pin-auth');
+const { logBitacora } = require('../../shared/audit');
 const { findOrCreateCustomer, awardStamp, redeemRewardWithClient } = require('../loyalty/service');
 
 // Total amount of each inventory item an order consumes. Lines are summed per
@@ -72,14 +73,30 @@ function closeError(message, statusCode = 400) {
   return Object.assign(new Error(message), { statusCode });
 }
 
-// Rejects closes that would otherwise settle an order without paying or redeeming:
-// a loyalty "payment" with no customer/PIN (skipped the redemption entirely) or
-// cash/card amounts that don't cover the total. Split payments (pagos), cortesia and
-// a close with no method (the bar's "listo" button) keep their existing handling.
+// A cortesia gives product away, so the close must be authorized by a staff PIN — both
+// for a whole-order cortesia and for one person's share of a split payment.
+function requiresCompAuthorization(payload = {}) {
+  if (payload.payment_method === 'cortesia') return true;
+  return Array.isArray(payload.pagos) && payload.pagos.some((pago) => pago.payment_method === 'cortesia');
+}
+
+// Rejects closes that would otherwise settle an order without paying, redeeming or being
+// authorized: a loyalty "payment" with no customer/PIN (skipped the redemption entirely),
+// a cortesia with no staff PIN, cliente_frecuente inside a split (nothing is redeemed
+// there), or cash/card amounts that don't cover the total. A close with no method (the
+// bar's "listo" button) keeps its existing handling.
 function assertValidClosePayment(order, payload = {}) {
   const method = payload.payment_method;
   const hasSplitPayments = Array.isArray(payload.pagos) && payload.pagos.length > 0;
-  if (hasSplitPayments) return;
+  if (requiresCompAuthorization(payload) && (!payload.actor_nombre || !payload.actor_pin)) {
+    throw closeError('Una cortesía requiere el nombre y el PIN del staff que la autoriza.');
+  }
+  if (hasSplitPayments) {
+    if (payload.pagos.some((pago) => pago.payment_method === 'cliente_frecuente')) {
+      throw closeError('El canje de cliente frecuente no se puede dividir. Cierra la orden con el método Frecuente.');
+    }
+    return;
+  }
   if (method === 'cliente_frecuente') {
     if (!payload.loyalty_customer_id || !payload.actor_nombre || !payload.actor_pin) {
       throw closeError('El canje de cliente frecuente requiere el cliente y el PIN del staff.');
@@ -113,6 +130,15 @@ async function closeOrder(orderId, payload = {}) {
     if (payload.payment_method === 'cliente_frecuente' && payload.loyalty_customer_id) {
       await verifyStaffPin(payload.actor_nombre, payload.actor_pin);
       redencion = await redeemRewardWithClient(payload.loyalty_customer_id, orderId, payload.actor_nombre, client);
+    }
+
+    if (requiresCompAuthorization(payload)) {
+      const staff = await verifyStaffPin(payload.actor_nombre, payload.actor_pin);
+      await logBitacora({
+        entidadTipo: 'orden', entidadId: orderId, accion: 'cortesia',
+        actorNombre: staff.nombre, actorTipo: staff.tipo, estadoAnterior: order.status, estadoNuevo: 'cerrada',
+        detalle: { total: Number(order.total), notas: payload.notas || null }
+      }, client);
     }
 
     await deductInventoryForOrder(client, orderId);
@@ -154,4 +180,4 @@ async function closeOrder(orderId, payload = {}) {
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
-module.exports = { closeOrder, cancelOrder, deductInventoryForOrder, aggregatePagos, assertValidClosePayment };
+module.exports = { closeOrder, cancelOrder, deductInventoryForOrder, aggregatePagos, assertValidClosePayment, requiresCompAuthorization };
