@@ -6,9 +6,9 @@
    reward badge) stay here. Tilt/sheen wiring + [data-fx] handling lives in
    orama-fx.js; reduced-motion is handled globally in orama-pro.css. */
 
-.loyalty-body{position:relative;display:flex;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;padding:24px;overflow:hidden}
+.loyalty-body{position:relative;display:flex;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;padding:24px}
 .loyalty-shell{position:relative;z-index:1;width:min(420px,100%)}
-.loyalty-card{position:relative;padding:0;overflow:hidden;border-radius:18px;box-shadow:0 2px 6px rgba(0,0,0,.35),0 18px 40px rgba(0,0,0,.4),0 40px 80px -20px rgba(42,157,143,.18);animation:fx-rise .7s var(--ease) both}
+.loyalty-card{position:relative;padding:0;overflow:hidden;border-radius:18px;box-shadow:0 2px 6px rgba(0,0,0,.35),0 18px 40px rgba(0,0,0,.4),0 40px 80px -20px rgba(42,157,143,.18);animation:fx-rise .7s var(--ease) backwards}
 .loyalty-card-head{position:relative;padding:30px 24px 24px;text-align:center;background:linear-gradient(160deg,var(--teal),#1f7a6f);overflow:hidden;border-radius:17px 17px 0 0}
 .loyalty-card-head::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 0%,rgba(255,255,255,.25),transparent 55%);pointer-events:none}
 .loyalty-card-head .logo{position:relative;width:150px;margin:0 auto 10px;color:#08211d;animation:fx-rise .6s .1s var(--ease) both}
@@ -54,8 +54,3 @@
 .loyalty-customer-phone{margin:0 0 18px;text-align:center;color:var(--muted);font:12px 'JetBrains Mono',monospace}
 .loyalty-switch{display:block;margin:16px auto 0;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer}
 .loyalty-footer{margin-top:14px;text-align:center;color:var(--muted);font-size:11px}
-
-@media (prefers-reduced-motion: reduce){
-  .stamp-cell.filled,.stamp-cell.reward.available .spark,.stamp-badge{animation:none!important}
-  .loyalty-progress-fill{transition:none!important}
-}
