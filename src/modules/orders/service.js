@@ -91,6 +91,7 @@ function assertValidClosePayment(order, payload = {}) {
   if (requiresCompAuthorization(payload) && (!payload.actor_nombre || !payload.actor_pin)) {
     throw closeError('Una cortesía requiere el nombre y el PIN del staff que la autoriza.');
   }
+  if (!method && !hasSplitPayments) throw closeError('Se requiere el método de pago para cerrar la orden.');
   if (hasSplitPayments) {
     if (payload.pagos.some((pago) => pago.payment_method === 'cliente_frecuente')) {
       throw closeError('El canje de cliente frecuente no se puede dividir. Cierra la orden con el método Frecuente.');
@@ -180,4 +181,18 @@ async function closeOrder(orderId, payload = {}) {
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
-module.exports = { closeOrder, cancelOrder, deductInventoryForOrder, aggregatePagos, assertValidClosePayment, requiresCompAuthorization };
+// The bar marks an order ready without closing it: closing means "paid", and ready is a
+// separate fact. The order stays open for the cashier to collect, so a tap on "Listo"
+// can no longer drop an unpaid order off the list.
+async function markOrderReady(orderId, db = pool) {
+  const { rows } = await db.query(
+    "UPDATE ordenes SET listo_at = COALESCE(listo_at, NOW()) WHERE id = $1 AND status = 'abierta' RETURNING id, listo_at",
+    [orderId]
+  );
+  if (rows[0]) return rows[0];
+  const { rows: current } = await db.query('SELECT status FROM ordenes WHERE id = $1', [orderId]);
+  if (!current[0]) throw Object.assign(new Error('Orden no encontrada'), { statusCode: 404 });
+  throw Object.assign(new Error(`No se puede marcar como lista una orden ${current[0].status}.`), { statusCode: 409 });
+}
+
+module.exports = { markOrderReady, closeOrder, cancelOrder, deductInventoryForOrder, aggregatePagos, assertValidClosePayment, requiresCompAuthorization };

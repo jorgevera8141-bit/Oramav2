@@ -40,8 +40,9 @@ test('assertValidClosePayment accepts cliente_frecuente with customer id and PIN
   }));
 });
 
-test('assertValidClosePayment lets a close with no payment method through (bar "listo" button)', () => {
-  assert.doesNotThrow(() => assertValidClosePayment(order, {}));
+test('assertValidClosePayment rejects a close with no payment method and no split payments', () => {
+  rejects({}, 400);
+  rejects({ amount_cash: 100 }, 400);
 });
 
 test('assertValidClosePayment requires efectivo/tarjeta/mixto amounts to cover the order total', () => {
@@ -137,4 +138,22 @@ test('cancelOrder refuses to cancel an order that is already closed', async () =
 
 test('cancelOrder reports 404 for an order that does not exist', async () => {
   await assert.rejects(() => cancelOrder(99, null, fakeClient([])), (error) => error.statusCode === 404);
+});
+
+const { markOrderReady } = require('../src/modules/orders/service');
+
+test('markOrderReady stamps listo_at on an open order without closing it', async () => {
+  const client = fakeClient([["SET listo_at", () => ({ rows: [{ id: 5, listo_at: '2026-10-01T20:00:00Z' }], rowCount: 1 })]]);
+  const result = await markOrderReady(5, client);
+  assert.equal(result.id, 5);
+  const update = client.writes.find((w) => w.sql.includes('SET listo_at'));
+  assert.ok(update, 'listo_at should be written');
+  assert.doesNotMatch(update.sql, /status\s*=\s*'cerrada'/, 'marking ready must not close the order');
+  assert.match(update.sql, /status = 'abierta'/);
+});
+
+test('markOrderReady refuses a closed order and reports an unknown one', async () => {
+  const closed = fakeClient([['SELECT status FROM ordenes', () => ({ rows: [{ status: 'cerrada' }] })]]);
+  await assert.rejects(() => markOrderReady(5, closed), (error) => error.statusCode === 409);
+  await assert.rejects(() => markOrderReady(99, fakeClient([])), (error) => error.statusCode === 404);
 });

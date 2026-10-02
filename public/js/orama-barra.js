@@ -19,7 +19,8 @@ async function barra() {
     if (!grid) return;
     try {
       const data = await api('/api/ordenes');
-      const orders = (data.ordenes || []).filter((order) => order.status === 'abierta');
+      // Ready orders stay open for the cashier to collect; the bar only lists what still needs making.
+      const orders = (data.ordenes || []).filter((order) => order.status === 'abierta' && !order.listo_at);
       const pendingEl = document.getElementById('barra-pending');
       if (pendingEl) pendingEl.textContent = orders.length;
       if (!orders.length) {
@@ -50,7 +51,7 @@ async function barra() {
     const originalLabel = button.textContent;
     button.textContent = 'Marcando…';
     try {
-      await api(`/api/ordenes/${button.dataset.listoId}/cerrar`, { method: 'PUT' });
+      await api(`/api/ordenes/${button.dataset.listoId}/listo`, { method: 'PUT' });
       doneCount += 1;
       const doneEl = document.getElementById('barra-done');
       if (doneEl) doneEl.textContent = doneCount;
