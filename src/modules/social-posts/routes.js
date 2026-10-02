@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../../config/database');
-const { validate } = require('../../middleware/validate');
+const { validate, numericIdParam } = require('../../middleware/validate');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { logBitacora, getStaffTipo } = require('../../shared/audit');
 const { notifyApprovalRequested } = require('../../shared/notify');
@@ -11,6 +11,7 @@ const { generateImage, IMAGE_MODEL, IMAGE_BACKEND } = require('./image-gen');
 const { assertUnderDailyLimit } = require('./ai-usage');
 
 const router = express.Router();
+router.param('id', numericIdParam);
 
 const EDITABLE = ['DRAFT', 'CHANGES_REQUESTED'];
 

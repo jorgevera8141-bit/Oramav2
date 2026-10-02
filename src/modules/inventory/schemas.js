@@ -13,4 +13,8 @@ const createInventoryItemSchema = z.object({
 
 const updateInventoryItemSchema = createInventoryItemSchema.partial();
 
-module.exports = { createInventoryItemSchema, updateInventoryItemSchema };
+const restockSchema = z.object({
+  amount: z.number().finite().positive().max(1_000_000)
+});
+
+module.exports = { createInventoryItemSchema, updateInventoryItemSchema, restockSchema };

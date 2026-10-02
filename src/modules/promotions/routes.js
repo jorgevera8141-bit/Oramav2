@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../../config/database');
-const { validate } = require('../../middleware/validate');
+const { validate, numericIdParam } = require('../../middleware/validate');
 const { createPromotionSchema, updatePromotionSchema, pinActionSchema, reviewActionSchema, previewSchema } = require('./schemas');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { logBitacora, getStaffTipo } = require('../../shared/audit');
@@ -10,6 +10,7 @@ const { localDateString } = require('../../shared/timezone');
 const { sweepPromotionLifecycle, getActivePromotions, priceItems } = require('./service');
 
 const router = express.Router();
+router.param('id', numericIdParam);
 
 router.get('/promotions', async (req, res) => {
   await sweepPromotionLifecycle();

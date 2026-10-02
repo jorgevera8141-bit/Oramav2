@@ -1,13 +1,14 @@
 const express = require('express');
 const pool = require('../../config/database');
 const { closeOrder, cancelOrder, markOrderReady } = require('./service');
-const { validate } = require('../../middleware/validate');
+const { validate, numericIdParam } = require('../../middleware/validate');
 const { cerrarSchema, cancelarSchema, crearOrdenSchema } = require('./schemas');
 const { parseDateParam } = require('../../shared/dates');
 const { localDateSql, TODAY_SQL } = require('../../shared/timezone');
 const { priceItems, recordRedemptions } = require('../promotions/service');
 
 const router = express.Router();
+router.param('id', numericIdParam);
 
 router.get('/ordenes', async (_req, res) => {
   const { rows } = await pool.query('SELECT * FROM ordenes ORDER BY created_at DESC');
