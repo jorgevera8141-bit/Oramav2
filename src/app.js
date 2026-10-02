@@ -19,6 +19,10 @@ const pricingRoutes = require('./modules/pricing/routes');
 
 const app = express();
 
+// Railway terminates TLS in one proxy hop; trust it so req.ip is the real client address
+// (the rate limiter keys on it) instead of the proxy's.
+app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -267,6 +271,10 @@ async function initDb() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(orden_id)
   )`);
+  // Self-signup consent is typed by whoever knows the phone number, not proven by its
+  // owner, so it is stored as unverified. Anything that sends marketing must require
+  // consent_verified = true (set only after the owner confirms, e.g. at the counter).
+  await pool.query('ALTER TABLE loyalty_customers ADD COLUMN IF NOT EXISTS consent_verified BOOLEAN NOT NULL DEFAULT false');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_loyalty_stamps_customer ON loyalty_stamps(customer_id, consumed_by_redencion_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_loyalty_redenciones_customer ON loyalty_redenciones(customer_id)');
   await pool.query('ALTER TABLE orden_items ADD COLUMN IF NOT EXISTS promocion_id INTEGER REFERENCES promociones(id)');
