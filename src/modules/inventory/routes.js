@@ -1,10 +1,11 @@
 const express = require('express');
 const pool = require('../../config/database');
 const { notify } = require('../../shared/ntfy');
-const { validate } = require('../../middleware/validate');
-const { createInventoryItemSchema, updateInventoryItemSchema } = require('./schemas');
+const { validate, numericIdParam } = require('../../middleware/validate');
+const { createInventoryItemSchema, updateInventoryItemSchema, restockSchema } = require('./schemas');
 
 const router = express.Router();
+router.param('id', numericIdParam);
 
 router.get('/inventory', async (_req, res) => {
   const { rows } = await pool.query('SELECT * FROM inventory_items ORDER BY id ASC');
@@ -45,9 +46,9 @@ router.delete('/inventory/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/inventory/:id/restock', async (req, res) => {
+router.post('/inventory/:id/restock', validate(restockSchema), async (req, res) => {
   const id = Number(req.params.id);
-  const amount = Number((req.body || {}).amount || 0);
+  const { amount } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

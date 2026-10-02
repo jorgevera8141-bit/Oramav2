@@ -5,6 +5,11 @@ const { localDateSql, localTimestampSql, TODAY_SQL } = require('../../shared/tim
 
 const router = express.Router();
 
+// Which menu item an order line belongs to. Lines carry menu_item_id; rows saved before
+// that column existed fall back to the name, picking a single match so two menu items
+// sharing a name can't double-count a line (the old join on nombre did exactly that).
+const LINE_MENU_ITEM_SQL = `COALESCE(oi.menu_item_id, (SELECT m2.id FROM menu_items m2 WHERE m2.nombre = oi.item_nombre ORDER BY m2.id LIMIT 1))`;
+
 router.get('/resumen', async (req, res) => {
   const date = parseDateParam(req.query.date);
   const dateFilter = date ? '$1' : TODAY_SQL;
@@ -71,7 +76,7 @@ router.get('/reportes/v2', async (req, res) => {
     `SELECT mi.categoria, COALESCE(SUM(oi.cantidad),0)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio),0) AS total
      FROM orden_items oi
      JOIN ordenes o ON o.id = oi.orden_id
-     JOIN menu_items mi ON mi.nombre = oi.item_nombre
+     JOIN menu_items mi ON mi.id = ${LINE_MENU_ITEM_SQL}
      WHERE o.status = 'cerrada' AND ${localDateSql('o.closed_at')} BETWEEN $1 AND $2
      GROUP BY mi.categoria ORDER BY total DESC`,
     [from, to]
@@ -129,11 +134,11 @@ router.get('/reportes/margenes', async (_req, res) => {
       GROUP BY ri.menu_item_id
     ) recipe_cost ON recipe_cost.menu_item_id = mi.id
     LEFT JOIN (
-      SELECT oi.item_nombre, SUM(oi.cantidad) AS vendidos_30d
+      SELECT ${LINE_MENU_ITEM_SQL} AS menu_item_id, SUM(oi.cantidad) AS vendidos_30d
       FROM orden_items oi JOIN ordenes o ON o.id = oi.orden_id
       WHERE o.created_at >= NOW() - INTERVAL '30 days'
-      GROUP BY oi.item_nombre
-    ) sold ON sold.item_nombre = mi.nombre
+      GROUP BY 1
+    ) sold ON sold.menu_item_id = mi.id
     ORDER BY mi.nombre
   `);
 

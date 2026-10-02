@@ -462,14 +462,17 @@ router.post('/staff/payroll/tips-distribution', verifyAdmin, async (req, res) =>
     });
   }
 
-  // Get active staff from last week (those who worked)
+  // Active staff who clocked out during the last 7 local days, with the hours they worked
+  // (net of breaks), in one query.
   const { rows: staffRows } = await pool.query(
-    `SELECT DISTINCT s.id, s.nombre, s.tipo, s.hourly_rate
+    `SELECT s.id, s.nombre, s.tipo,
+            COALESCE(SUM(EXTRACT(EPOCH FROM (tc.clock_out - tc.clock_in)) / 3600 - tc.total_break_minutes / 60.0), 0)::float8 AS hours
      FROM staff s
-     INNER JOIN time_clock tc ON s.id = tc.staff_id
+     JOIN time_clock tc ON tc.staff_id = s.id
      WHERE s.activo = 1
        AND ${localDateSql('tc.clock_in')} BETWEEN ${TODAY_SQL} - 6 AND ${TODAY_SQL}
        AND tc.clock_out IS NOT NULL
+     GROUP BY s.id, s.nombre, s.tipo
      ORDER BY s.nombre`
   );
 
@@ -477,71 +480,9 @@ router.post('/staff/payroll/tips-distribution', verifyAdmin, async (req, res) =>
     return res.status(400).json({ success: false, error: 'No staff members worked in the last week' });
   }
 
-  let distribution = [];
-
-  if (distribution_type === 'equal') {
-    // Equal distribution
-    const perPerson = tips / staffRows.length;
-    distribution = staffRows.map(staff => ({
-      staffId: staff.id,
-      nombre: staff.nombre,
-      tipo: staff.tipo,
-      amount: parseFloat(perPerson.toFixed(2))
-    }));
-  }
-  else if (distribution_type === 'hours_worked') {
-    // Distribution by hours worked
-    const staffHoursPromises = staffRows.map(async (staff) => {
-      const { rows: timeClockRows } = await pool.query(
-        `SELECT
-             COALESCE(SUM(EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600 - (total_break_minutes / 60.0)), 0) as total_hours
-         FROM time_clock
-         WHERE staff_id = $1
-           AND ${localDateSql('clock_in')} BETWEEN ${TODAY_SQL} - 6 AND ${TODAY_SQL}
-           AND clock_out IS NOT NULL`,
-        [staff.id]
-      );
-
-      return {
-        staff: staff,
-        hours: parseFloat(timeClockRows[0].total_hours || 0)
-      };
-    });
-
-    const staffHoursData = await Promise.all(staffHoursPromises);
-
-    const totalHours = staffHoursData.reduce((sum, item) => sum + item.hours, 0);
-
-    if (totalHours > 0) {
-      distribution = staffHoursData.map(item => ({
-        staffId: item.staff.id,
-        nombre: item.staff.nombre,
-        tipo: item.tipo,
-        hoursWorked: parseFloat(item.hours.toFixed(2)),
-        amount: parseFloat((tips * (item.hours / totalHours)).toFixed(2))
-      }));
-    } else {
-      // Fallback to equal if no hours worked
-      const perPerson = tips / staffRows.length;
-      distribution = staffRows.map(staff => ({
-        staffId: staff.id,
-        nombre: staff.nombre,
-        tipo: staff.tipo,
-        amount: parseFloat(perPerson.toFixed(2))
-      }));
-    }
-  }
-  else if (distribution_type === 'percentage') {
-    // For percentage based, we'd need additional percentages per staff
-    // For now, default to equal distribution as placeholder
-    const perPerson = tips / staffRows.length;
-    distribution = staffRows.map(staff => ({
-      staffId: staff.id,
-      nombre: staff.nombre,
-      tipo: staff.tipo,
-      amount: parseFloat(perPerson.toFixed(2))
-    }));
-  }
+  const distribution = staffService.distributeTips({
+    tips, distributionType: distribution_type, staffRows, percentages: req.body.percentages
+  });
 
   const totalDistributed = distribution.reduce((sum, item) => sum + item.amount, 0);
 

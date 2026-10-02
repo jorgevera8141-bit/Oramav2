@@ -282,6 +282,8 @@ async function initDb() {
   await pool.query('ALTER TABLE orden_items ADD COLUMN IF NOT EXISTS descuento_unitario NUMERIC DEFAULT 0');
   await pool.query('ALTER TABLE promocion_redenciones ADD COLUMN IF NOT EXISTS unidades INTEGER NOT NULL DEFAULT 1');
   await pool.query('ALTER TABLE staff ADD COLUMN IF NOT EXISTS hourly_rate DECIMAL(10, 2) DEFAULT 0.00');
+  // The bar marks an order ready (listo_at) without closing it; closing means paid.
+  await pool.query('ALTER TABLE ordenes ADD COLUMN IF NOT EXISTS listo_at TIMESTAMP');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_bitacora_entidad ON bitacora(entidad_tipo, entidad_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_promocion_redenciones_promo ON promocion_redenciones(promocion_id)');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_orden_pagos_orden ON orden_pagos(orden_id)');

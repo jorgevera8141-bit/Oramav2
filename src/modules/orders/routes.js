@@ -1,13 +1,14 @@
 const express = require('express');
 const pool = require('../../config/database');
-const { closeOrder, cancelOrder } = require('./service');
-const { validate } = require('../../middleware/validate');
+const { closeOrder, cancelOrder, markOrderReady } = require('./service');
+const { validate, numericIdParam } = require('../../middleware/validate');
 const { cerrarSchema, cancelarSchema, crearOrdenSchema } = require('./schemas');
 const { parseDateParam } = require('../../shared/dates');
 const { localDateSql, TODAY_SQL } = require('../../shared/timezone');
 const { priceItems, recordRedemptions } = require('../promotions/service');
 
 const router = express.Router();
+router.param('id', numericIdParam);
 
 router.get('/ordenes', async (_req, res) => {
   const { rows } = await pool.query('SELECT * FROM ordenes ORDER BY created_at DESC');
@@ -70,6 +71,11 @@ router.post('/ordenes', validate(crearOrdenSchema), async (req, res) => {
 router.put('/ordenes/:id/cerrar', validate(cerrarSchema), async (req, res) => {
   const orden = await closeOrder(Number(req.params.id), req.body || {});
   res.json({ success: true, orden });
+});
+
+router.put('/ordenes/:id/listo', async (req, res) => {
+  const { id, listo_at: listoAt } = await markOrderReady(Number(req.params.id));
+  res.json({ success: true, id, listo_at: listoAt });
 });
 
 router.put('/ordenes/:id/cancelar', validate(cancelarSchema), async (req, res) => {

@@ -1,6 +1,9 @@
 const express = require('express');
 const pool = require('../../config/database');
 
+const { validate } = require('../../middleware/validate');
+const { createMesaSchema } = require('./schemas');
+
 const router = express.Router();
 
 router.get('/mesas', async (_req, res) => {
@@ -8,8 +11,8 @@ router.get('/mesas', async (_req, res) => {
   res.json({ success: true, mesas: rows });
 });
 
-router.post('/mesas', async (req, res) => {
-  const { nombre, status } = req.body || {};
+router.post('/mesas', validate(createMesaSchema), async (req, res) => {
+  const { nombre, status } = req.body;
   const { rows } = await pool.query(
     'INSERT INTO mesas (nombre, status) VALUES ($1, COALESCE($2, \'disponible\')) RETURNING *',
     [nombre, status]

@@ -1,10 +1,11 @@
 const express = require('express');
 const pool = require('../../config/database');
-const { validate } = require('../../middleware/validate');
+const { validate, numericIdParam } = require('../../middleware/validate');
 const { createGastoSchema } = require('./schemas');
 const { parseDateParam } = require('../../shared/dates');
 
 const router = express.Router();
+router.param('id', numericIdParam);
 
 router.get('/gastos', async (req, res) => {
   const from = parseDateParam(req.query.from);
