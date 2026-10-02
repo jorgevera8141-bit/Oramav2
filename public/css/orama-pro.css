@@ -118,8 +118,8 @@ main{position:relative;z-index:1}
 
 /* ---- Button roles: destructive and primary actions read at rest, not only on hover ---- */
 .button.danger{border-color:rgba(201,112,100,.55);background:rgba(201,112,100,.1);color:#f1c0b9}
-.button.primary,.order-card [data-pay-id]{border-color:var(--teal);background:var(--teal);color:#081513;font-weight:600}
-.button.primary:hover,.order-card [data-pay-id]:hover{border-color:#34b3a4;background:#34b3a4;color:#081513}
+.button.primary,.order-card [data-pay-id],.order-card [data-listo-id]{border-color:var(--teal);background:var(--teal);color:#081513;font-weight:600}
+.button.primary:hover,.order-card [data-pay-id]:hover,.order-card [data-listo-id]:hover{border-color:#34b3a4;background:#34b3a4;color:#081513}
 
 /* Page headings sit directly on the bean photo: a soft shadow keeps eyebrow, title and subtitle legible. */
 .page-head .eyebrow,.page-head h1,.page-head .subtle{text-shadow:0 1px 12px rgba(0,0,0,.75)}
