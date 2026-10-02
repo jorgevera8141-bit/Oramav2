@@ -63,9 +63,27 @@ async function getCard(customerId, db = pool) {
   };
 }
 
+// The public card page and the cashier only need these three fields. Consent flags,
+// status and timestamps stay server-side: the phone number is the only credential for
+// the unauthenticated lookup, so everything else it returns is exposed to anyone who
+// knows (or guesses) a number.
+function toPublicCustomer(customer) {
+  return { id: customer.id, phone: customer.phone, nombre: customer.nombre };
+}
+
+function assertCustomerActive(customer) {
+  if (customer.status !== 'active') {
+    throw Object.assign(new Error('Esta tarjeta no está disponible. Habla con el staff.'), { statusCode: 403 });
+  }
+}
+
+// Only active cards earn stamps; the SELECT … WHERE makes the status check part of the
+// same statement instead of a read-then-write.
 async function awardStamp(customerId, ordenId, db = pool) {
   await db.query(
-    'INSERT INTO loyalty_stamps (customer_id, orden_id) VALUES ($1, $2) ON CONFLICT (orden_id) DO NOTHING',
+    `INSERT INTO loyalty_stamps (customer_id, orden_id)
+     SELECT id, $2 FROM loyalty_customers WHERE id = $1 AND status = 'active'
+     ON CONFLICT (orden_id) DO NOTHING`,
     [customerId, ordenId]
   );
 }
@@ -88,6 +106,10 @@ async function mostFrequentItem(customerId, db = pool) {
 // BEGIN/COMMIT/ROLLBACK here) — lets an order-close flow redeem a reward and close
 // the order as a single atomic transaction, so a failure either place undoes both.
 async function redeemRewardWithClient(customerId, ordenId, actorNombre, client) {
+  const { rows: customerRows } = await client.query('SELECT status FROM loyalty_customers WHERE id = $1 FOR UPDATE', [customerId]);
+  if (!customerRows[0]) throw Object.assign(new Error('Cliente no encontrado'), { statusCode: 404 });
+  assertCustomerActive(customerRows[0]);
+
   const { rows: unconsumed } = await client.query(
     `SELECT id FROM loyalty_stamps WHERE customer_id = $1 AND consumed_by_redencion_id IS NULL
      ORDER BY created_at ASC LIMIT $2 FOR UPDATE`,
@@ -189,6 +211,8 @@ module.exports = {
   findOrCreateCustomer,
   getCard,
   awardStamp,
+  toPublicCustomer,
+  assertCustomerActive,
   mostFrequentItem,
   redeemReward,
   redeemRewardWithClient,
