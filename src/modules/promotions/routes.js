@@ -6,6 +6,7 @@ const { verifyStaffPin } = require('../../shared/pin-auth');
 const { logBitacora, getStaffTipo } = require('../../shared/audit');
 const { notifyApprovalRequested } = require('../../shared/notify');
 const { hasWindowStarted, toDateString } = require('./engine');
+const { localDateString } = require('../../shared/timezone');
 const { sweepPromotionLifecycle, getActivePromotions, priceItems } = require('./service');
 
 const router = express.Router();
@@ -112,7 +113,7 @@ router.post('/promotions/:id/submit', validate(pinActionSchema), async (req, res
   if (!['DRAFT', 'CHANGES_REQUESTED'].includes(promo.estado)) {
     throw Object.assign(new Error(`No se puede enviar a revisión una promoción en estado ${promo.estado}.`), { statusCode: 400 });
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
   if (toDateString(promo.fecha_fin) < today) {
     throw Object.assign(new Error('No se puede enviar a revisión una promoción cuya fecha de expiración ya pasó.'), { statusCode: 400 });
   }
@@ -165,7 +166,7 @@ router.post('/promotions/:id/activate', validate(pinActionSchema), async (req, r
   if (!['APPROVED', 'SCHEDULED'].includes(promo.estado)) {
     throw Object.assign(new Error(`Solo se pueden activar promociones aprobadas o programadas (estado actual: ${promo.estado}).`), { statusCode: 400 });
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateString();
   if (toDateString(promo.fecha_fin) < today) {
     throw Object.assign(new Error('No se pudo activar la promoción porque la fecha de expiración ya pasó.'), { statusCode: 400 });
   }

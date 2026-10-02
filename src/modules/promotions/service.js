@@ -1,16 +1,17 @@
 const pool = require('../../config/database');
 const { applyPromotions } = require('./engine');
+const { TODAY_SQL, NOW_TIME_SQL } = require('../../shared/timezone');
 
 async function sweepPromotionLifecycle() {
   await pool.query(`
     UPDATE promociones SET estado = 'ACTIVE', updated_at = now()
     WHERE estado = 'SCHEDULED'
-      AND (fecha_inicio < CURRENT_DATE OR (fecha_inicio = CURRENT_DATE AND (hora_inicio IS NULL OR hora_inicio <= CURRENT_TIME)))
+      AND (fecha_inicio < ${TODAY_SQL} OR (fecha_inicio = ${TODAY_SQL} AND (hora_inicio IS NULL OR hora_inicio <= ${NOW_TIME_SQL})))
   `);
   await pool.query(`
     UPDATE promociones SET estado = 'EXPIRED', updated_at = now()
     WHERE estado = 'ACTIVE'
-      AND (fecha_fin < CURRENT_DATE OR (fecha_fin = CURRENT_DATE AND hora_fin IS NOT NULL AND hora_fin < CURRENT_TIME))
+      AND (fecha_fin < ${TODAY_SQL} OR (fecha_fin = ${TODAY_SQL} AND hora_fin IS NOT NULL AND hora_fin < ${NOW_TIME_SQL}))
   `);
 }
 

@@ -1,3 +1,5 @@
+const { localDateString, localTimeString } = require('../../shared/timezone');
+
 const PROMOTION_TIPOS = ['precio_fijo', 'descuento_porcentaje', 'compra_x_lleva_y'];
 
 function round2(value) {
@@ -13,20 +15,22 @@ function toDateString(value) {
   return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
 }
 
+// fecha_* / hora_* are wall-clock values entered by staff, so they are compared against
+// the café's local date and time rather than UTC (see shared/timezone.js).
 function isWithinWindow(promo, now) {
-  const today = now.toISOString().slice(0, 10);
+  const today = localDateString(now);
   const fechaInicio = toDateString(promo.fecha_inicio);
   const fechaFin = toDateString(promo.fecha_fin);
   if (today < fechaInicio || today > fechaFin) return false;
-  const time = now.toISOString().slice(11, 19);
+  const time = localTimeString(now);
   if (promo.hora_inicio && time < promo.hora_inicio) return false;
   if (promo.hora_fin && time > promo.hora_fin) return false;
   return true;
 }
 
 function hasWindowStarted(promo, now) {
-  const today = now.toISOString().slice(0, 10);
-  const time = now.toISOString().slice(11, 19);
+  const today = localDateString(now);
+  const time = localTimeString(now);
   const fechaInicio = toDateString(promo.fecha_inicio);
   if (fechaInicio < today) return true;
   if (fechaInicio > today) return false;
