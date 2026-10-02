@@ -58,3 +58,62 @@ test('assertValidClosePayment leaves cortesia and split-payment closes to their 
   assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'cortesia' }));
   assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'dividido', pagos: [{ payment_method: 'efectivo', amount_cash: 100 }] }));
 });
+
+const { deductInventoryForOrder, cancelOrder } = require('../src/modules/orders/service');
+
+// Minimal fake pg client: answers each query by a SQL fragment and records the writes.
+function fakeClient(responders) {
+  const writes = [];
+  return {
+    writes,
+    async query(sql, params) {
+      if (/^\s*(UPDATE|INSERT)/i.test(sql)) writes.push({ sql, params });
+      const match = responders.find(([fragment]) => sql.includes(fragment));
+      return match ? match[1](params) : { rows: [], rowCount: 0 };
+    }
+  };
+}
+
+test('deductInventoryForOrder deducts a shared ingredient once per menu item that uses it', async () => {
+  // Latte (2 units, 0.2 L milk each) + Capuchino (1 unit, 0.15 L milk): 0.55 L of milk in total.
+  const client = fakeClient([
+    ['FROM orden_items oi', () => ({ rows: [
+      { inventory_item_id: 7, quantity_used: '0.2', cantidad: 2 },
+      { inventory_item_id: 7, quantity_used: '0.15', cantidad: 1 }
+    ] })]
+  ]);
+  await deductInventoryForOrder(client, 42);
+  const stockUpdates = client.writes.filter((w) => w.sql.includes('UPDATE inventory_items'));
+  assert.equal(stockUpdates.length, 1);
+  assert.ok(Math.abs(stockUpdates[0].params[0] - 0.55) < 1e-9);
+  assert.equal(stockUpdates[0].params[1], 7);
+  assert.equal(client.writes.filter((w) => w.sql.includes('INSERT INTO inventory_movements')).length, 1);
+});
+
+test('deductInventoryForOrder does not deduct an ingredient already recorded as a sale for this order', async () => {
+  const client = fakeClient([
+    ['FROM orden_items oi', () => ({ rows: [{ inventory_item_id: 7, quantity_used: '0.2', cantidad: 1 }] })],
+    ["reason = 'sale'", () => ({ rows: [{ inventory_item_id: 7 }] })]
+  ]);
+  await deductInventoryForOrder(client, 42);
+  assert.equal(client.writes.length, 0);
+});
+
+test('cancelOrder cancels an open order and frees its table', async () => {
+  const client = fakeClient([
+    ["status = 'cancelada'", () => ({ rows: [{ id: 5, mesa_id: 3 }], rowCount: 1 })]
+  ]);
+  await cancelOrder(5, 'cliente se fue', client);
+  assert.ok(client.writes.some((w) => w.sql.includes("UPDATE mesas SET status = 'disponible'") && w.params[0] === 3));
+});
+
+test('cancelOrder refuses to cancel an order that is already closed', async () => {
+  const client = fakeClient([
+    ['SELECT status FROM ordenes', () => ({ rows: [{ status: 'cerrada' }] })]
+  ]);
+  await assert.rejects(() => cancelOrder(5, null, client), (error) => error.statusCode === 409);
+});
+
+test('cancelOrder reports 404 for an order that does not exist', async () => {
+  await assert.rejects(() => cancelOrder(99, null, fakeClient([])), (error) => error.statusCode === 404);
+});

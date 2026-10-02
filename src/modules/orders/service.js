@@ -3,18 +3,59 @@ const { notify } = require('../../shared/ntfy');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { findOrCreateCustomer, awardStamp, redeemRewardWithClient } = require('../loyalty/service');
 
-async function deductInventoryForOrder(client, orderId) {
-  const { rows: items } = await client.query('SELECT item_nombre, cantidad FROM orden_items WHERE orden_id = $1', [orderId]);
-  for (const item of items) {
-    const { rows: recipes } = await client.query('SELECT ri.inventory_item_id, ri.quantity_used FROM recipe_items ri JOIN menu_items mi ON mi.id = ri.menu_item_id WHERE mi.nombre = $1 FOR UPDATE OF ri', [item.item_nombre]);
-    for (const recipe of recipes) {
-      const { rowCount } = await client.query("SELECT 1 FROM inventory_movements WHERE order_id = $1 AND inventory_item_id = $2 AND reason = 'sale' LIMIT 1", [orderId, recipe.inventory_item_id]);
-      if (rowCount) continue;
-      const amount = Number(recipe.quantity_used) * Number(item.cantidad || 1);
-      await client.query('UPDATE inventory_items SET current_stock = current_stock - $1 WHERE id = $2', [amount, recipe.inventory_item_id]);
-      await client.query("INSERT INTO inventory_movements (inventory_item_id, change_amount, reason, order_id, note) VALUES ($1, $2, 'sale', $3, $4)", [recipe.inventory_item_id, -amount, orderId, `Venta de orden ${orderId}`]);
-    }
+// Total amount of each inventory item an order consumes. Lines are summed per
+// ingredient first, so two menu items sharing milk deduct 0.2 + 0.15 together instead
+// of the second one being skipped by the once-per-order idempotency check below.
+function sumIngredientUsage(rows) {
+  const usage = new Map();
+  for (const row of rows) {
+    const amount = Number(row.quantity_used) * Number(row.cantidad || 1);
+    usage.set(row.inventory_item_id, (usage.get(row.inventory_item_id) || 0) + amount);
   }
+  return usage;
+}
+
+async function deductInventoryForOrder(client, orderId) {
+  // Recipes are matched by menu_item_id; rows saved before that column existed fall
+  // back to the item name, picking one menu item so a duplicate name can't double-count.
+  const { rows: usageRows } = await client.query(
+    `SELECT ri.inventory_item_id, ri.quantity_used, oi.cantidad
+     FROM orden_items oi
+     JOIN recipe_items ri ON ri.menu_item_id = COALESCE(
+       oi.menu_item_id,
+       (SELECT mi.id FROM menu_items mi WHERE mi.nombre = oi.item_nombre ORDER BY mi.id LIMIT 1)
+     )
+     WHERE oi.orden_id = $1
+     ORDER BY ri.inventory_item_id
+     FOR UPDATE OF ri`,
+    [orderId]
+  );
+  const { rows: alreadyDeducted } = await client.query(
+    "SELECT inventory_item_id FROM inventory_movements WHERE order_id = $1 AND reason = 'sale'",
+    [orderId]
+  );
+  const deducted = new Set(alreadyDeducted.map((row) => row.inventory_item_id));
+  for (const [inventoryItemId, amount] of sumIngredientUsage(usageRows)) {
+    if (deducted.has(inventoryItemId)) continue;
+    await client.query('UPDATE inventory_items SET current_stock = current_stock - $1 WHERE id = $2', [amount, inventoryItemId]);
+    await client.query("INSERT INTO inventory_movements (inventory_item_id, change_amount, reason, order_id, note) VALUES ($1, $2, 'sale', $3, $4)", [inventoryItemId, -amount, orderId, `Venta de orden ${orderId}`]);
+  }
+}
+
+// Only an open order can be cancelled: cancelling a closed one would leave its payment,
+// inventory deduction and loyalty stamp in place with the order marked cancelled.
+async function cancelOrder(orderId, motivo, db = pool) {
+  const { rows } = await db.query(
+    "UPDATE ordenes SET status = 'cancelada', notas = COALESCE($2, notas) WHERE id = $1 AND status = 'abierta' RETURNING id, mesa_id",
+    [orderId, motivo || null]
+  );
+  if (rows[0]) {
+    if (rows[0].mesa_id) await db.query("UPDATE mesas SET status = 'disponible' WHERE id = $1", [rows[0].mesa_id]);
+    return rows[0];
+  }
+  const { rows: current } = await db.query('SELECT status FROM ordenes WHERE id = $1', [orderId]);
+  if (!current[0]) throw Object.assign(new Error('Orden no encontrada'), { statusCode: 404 });
+  throw Object.assign(new Error(`No se puede cancelar una orden ${current[0].status}.`), { statusCode: 409 });
 }
 
 function aggregatePagos(pagos) {
@@ -113,4 +154,4 @@ async function closeOrder(orderId, payload = {}) {
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
-module.exports = { closeOrder, deductInventoryForOrder, aggregatePagos, assertValidClosePayment };
+module.exports = { closeOrder, cancelOrder, deductInventoryForOrder, aggregatePagos, assertValidClosePayment };
