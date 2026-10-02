@@ -26,7 +26,8 @@
 .loyalty-form label{display:block;margin-bottom:8px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
 .loyalty-form .search{width:100%;font-size:18px;letter-spacing:.04em;text-align:center;transition:box-shadow .25s var(--ease),border-color .25s var(--ease)}
 .loyalty-form .search:focus{border-color:var(--teal);box-shadow:0 0 0 4px var(--teal-soft)}
-.loyalty-form .button{width:100%;margin-top:14px}
+.loyalty-form .button{width:100%;margin-top:14px;border-color:var(--teal);background:var(--teal);color:#081513;font-weight:600}
+.loyalty-form .button:hover{border-color:#34b3a4;background:#34b3a4;color:#081513}
 .loyalty-error{margin-top:12px;animation:fx-rise .3s var(--ease) both}
 
 /* ---- Stamp grid: punch card, each new stamp "stamps in" with a stagger ---- */
