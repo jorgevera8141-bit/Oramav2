@@ -15,7 +15,7 @@
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.124.0",
 		"express": "^5.1.0",
-		"multer": "^2.3.0",
+		"multer": "^2.4.0",
 		"pg": "^8.16.3",
 		"sharp": "^0.35.4",
 		"zod": "^4.1.5"
