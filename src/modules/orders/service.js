@@ -32,14 +32,13 @@ function closeError(message, statusCode = 400) {
 }
 
 // Rejects closes that would otherwise settle an order without paying or redeeming:
-// a loyalty "payment" with no customer/PIN (skipped the redemption entirely), no
-// payment method at all, or cash/card amounts that don't cover the total. Split
-// payments (pagos) and cortesia keep their existing handling.
+// a loyalty "payment" with no customer/PIN (skipped the redemption entirely) or
+// cash/card amounts that don't cover the total. Split payments (pagos), cortesia and
+// a close with no method (the bar's "listo" button) keep their existing handling.
 function assertValidClosePayment(order, payload = {}) {
   const method = payload.payment_method;
   const hasSplitPayments = Array.isArray(payload.pagos) && payload.pagos.length > 0;
   if (hasSplitPayments) return;
-  if (!method) throw closeError('Se requiere el método de pago para cerrar la orden.');
   if (method === 'cliente_frecuente') {
     if (!payload.loyalty_customer_id || !payload.actor_nombre || !payload.actor_pin) {
       throw closeError('El canje de cliente frecuente requiere el cliente y el PIN del staff.');

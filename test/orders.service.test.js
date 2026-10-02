@@ -40,9 +40,8 @@ test('assertValidClosePayment accepts cliente_frecuente with customer id and PIN
   }));
 });
 
-test('assertValidClosePayment rejects a close with no payment method and no split payments', () => {
-  rejects({}, 400);
-  rejects({ amount_cash: 100 }, 400);
+test('assertValidClosePayment lets a close with no payment method through (bar "listo" button)', () => {
+  assert.doesNotThrow(() => assertValidClosePayment(order, {}));
 });
 
 test('assertValidClosePayment requires efectivo/tarjeta/mixto amounts to cover the order total', () => {
