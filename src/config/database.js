@@ -1,6 +1,12 @@
 try { process.loadEnvFile(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// TIMESTAMP (no zone) columns hold UTC (the session is pinned to UTC below), but
+// node-pg parses them in the Node process's own timezone. Read them as UTC so the
+// app behaves the same on a laptop in any timezone as on the UTC production host.
+const TIMESTAMP_OID = 1114;
+types.setTypeParser(TIMESTAMP_OID, (value) => new Date(`${value.replace(' ', 'T')}Z`));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

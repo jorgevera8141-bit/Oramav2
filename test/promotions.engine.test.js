@@ -224,9 +224,9 @@ test('compra_x_lleva_y also respects a remaining redemption budget', () => {
 test('a time-restricted promotion only applies within its hora_inicio/hora_fin window', () => {
   const promo = basePromo({ id: 1, tipo: 'descuento_porcentaje', producto_ids: [1], porcentaje_descuento: 50, hora_inicio: '19:00:00', hora_fin: '21:00:00' });
   const items = [{ menu_item_id: 1, nombre: 'Latte', categoria: 'Café', precio: 50, cantidad: 1 }];
-  const outsideWindow = applyPromotions({ items, promotions: [promo], now: NOW }); // NOW is 18:00 UTC
+  const outsideWindow = applyPromotions({ items, promotions: [promo], now: NOW }); // NOW is 12:00 in Mexico City
   assert.equal(outsideWindow.descuento_total, 0);
-  const insideWindow = applyPromotions({ items, promotions: [promo], now: new Date('2026-09-06T20:00:00.000Z') });
+  const insideWindow = applyPromotions({ items, promotions: [promo], now: new Date('2026-09-07T02:00:00.000Z') }); // 20:00 in Mexico City
   assert.equal(insideWindow.descuento_total, 25);
 });
 
@@ -238,6 +238,17 @@ test('isWithinWindow rejects a date outside the promotion range', () => {
 test('isPromotionEligible rejects an expired promotion even without a limit', () => {
   const promo = basePromo({ fecha_inicio: '2026-01-01', fecha_fin: '2026-01-02' });
   assert.equal(isPromotionEligible(promo, NOW, {}), false);
+});
+
+test('promotion windows follow Mexico City time, not UTC', () => {
+  const lastDay = basePromo({ id: 1, tipo: 'descuento_porcentaje', producto_ids: [1], porcentaje_descuento: 50, fecha_fin: '2026-09-06' });
+  // 19:30 on Sep 6 locally is already Sep 7 in UTC; the promo's last day must still count.
+  assert.equal(isWithinWindow(lastDay, new Date('2026-09-07T01:30:00.000Z')), true);
+  assert.equal(isWithinWindow(lastDay, new Date('2026-09-07T06:00:00.000Z')), false); // midnight local, Sep 7
+
+  const happyHour = basePromo({ id: 2, hora_inicio: '16:00:00', hora_fin: '18:00:00' });
+  assert.equal(isWithinWindow(happyHour, new Date('2026-09-06T22:30:00.000Z')), true, '16:30 local');
+  assert.equal(isWithinWindow(happyHour, new Date('2026-09-06T16:30:00.000Z')), false, '10:30 local');
 });
 
 test('hasWindowStarted is true once fecha_inicio is today and hora_inicio has passed', () => {

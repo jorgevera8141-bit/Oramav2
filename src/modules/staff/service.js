@@ -1,15 +1,13 @@
 const pool = require('../../config/database');
 const { verifyStaffPin } = require('../../shared/pin-auth');
+const { localTimestampSql, localDateString, zonedDateTimeToUtc } = require('../../shared/timezone');
 
 function staffError(message, statusCode) {
   return Object.assign(new Error(message), { statusCode });
 }
 
 function currentDateString(now = new Date()) {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return localDateString(now);
 }
 
 function normalizeDateRange(query = {}, now = new Date()) {
@@ -47,8 +45,8 @@ function sessionRangeMinutes(session, range, now = new Date()) {
   const loginTime = parseTimestamp(session.login_time);
   const logoutTime = parseTimestamp(session.logout_time) || now;
   if (!loginTime || logoutTime <= loginTime) return 0;
-  const rangeStart = new Date(`${range.from}T00:00:00`);
-  const rangeEnd = new Date(`${range.to}T23:59:59.999`);
+  const rangeStart = zonedDateTimeToUtc(range.from, '00:00:00');
+  const rangeEnd = zonedDateTimeToUtc(range.to, '23:59:59.999');
   const effectiveStart = loginTime > rangeStart ? loginTime : rangeStart;
   const effectiveEnd = logoutTime < rangeEnd ? logoutTime : rangeEnd;
   if (effectiveEnd <= effectiveStart) return 0;
@@ -184,8 +182,8 @@ async function getStaffSessions(staffId, range, db = pool, now = new Date()) {
     `SELECT id, staff_id, screen, login_time, logout_time
      FROM staff_sessions
      WHERE staff_id = $1
-       AND login_time < ($3::date + INTERVAL '1 day')
-       AND COALESCE(logout_time, CURRENT_TIMESTAMP) >= $2::date
+       AND ${localTimestampSql('login_time')} < ($3::date + INTERVAL '1 day')
+       AND ${localTimestampSql('COALESCE(logout_time, CURRENT_TIMESTAMP)')} >= $2::date
      ORDER BY login_time DESC`,
     [staffId, range.from, range.to]
   );
@@ -199,8 +197,8 @@ async function getHoursSummary(range, db = pool, now = new Date()) {
      FROM staff s
      LEFT JOIN staff_sessions ss
        ON s.id = ss.staff_id
-      AND ss.login_time < ($2::date + INTERVAL '1 day')
-      AND COALESCE(ss.logout_time, CURRENT_TIMESTAMP) >= $1::date
+      AND ${localTimestampSql('ss.login_time')} < ($2::date + INTERVAL '1 day')
+      AND ${localTimestampSql('COALESCE(ss.logout_time, CURRENT_TIMESTAMP)')} >= $1::date
      ORDER BY s.nombre ASC, ss.login_time ASC`,
     [range.from, range.to]
   );

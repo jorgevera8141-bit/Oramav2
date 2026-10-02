@@ -4,6 +4,7 @@ const { verifyStaffPin } = require('../../shared/pin-auth');
 const { validate } = require('../../middleware/validate');
 const { clockPayloadSchema, timeClockEditSchema } = require('./schemas');
 const staffService = require('./service');
+const { localDateSql, TODAY_SQL, localDateString } = require('../../shared/timezone');
 
 const router = express.Router();
 
@@ -215,8 +216,7 @@ router.get('/staff/time-clock/recent', async (_req, res) => {
     `SELECT tc.id, tc.staff_id, s.nombre, tc.clock_in, tc.clock_out, tc.total_break_minutes
      FROM time_clock tc
      JOIN staff s ON s.id = tc.staff_id
-     WHERE tc.clock_in >= CURRENT_DATE - INTERVAL '6 days'
-       AND tc.clock_in < CURRENT_DATE + INTERVAL '1 day'
+     WHERE ${localDateSql('tc.clock_in')} BETWEEN ${TODAY_SQL} - 6 AND ${TODAY_SQL}
      ORDER BY tc.clock_in DESC`
   );
   res.json({ success: true, entries: rows });
@@ -354,8 +354,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
        ((EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0))::float8 as hours_worked
      FROM time_clock
      WHERE staff_id = $1
-       AND clock_in >= CURRENT_DATE - INTERVAL '6 days'
-       AND clock_in < CURRENT_DATE + INTERVAL '1 day'
+       AND ${localDateSql('clock_in')} BETWEEN ${TODAY_SQL} - 6 AND ${TODAY_SQL}
        AND clock_out IS NOT NULL
      ORDER BY clock_in DESC`,
     [staffId]
@@ -382,7 +381,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
       totalEarnings: parseFloat(totalEarnings.toFixed(2)),
       daysWorked,
       dailyDetails: timeClockRows.map(day => ({
-        date: day.clock_in.toISOString().split('T')[0],
+        date: localDateString(day.clock_in),
         hoursWorked: parseFloat((Number(day.hours_worked) || 0).toFixed(2)),
         clockIn: day.clock_in.toISOString(),
         clockOut: day.clock_out ? day.clock_out.toISOString() : null,
@@ -410,8 +409,7 @@ router.get('/staff/payroll/weekly', async (req, res) => {
          ((EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600) - (total_break_minutes / 60.0))::float8 as hours_worked
        FROM time_clock
        WHERE staff_id = $1
-         AND clock_in >= CURRENT_DATE - INTERVAL '6 days'
-         AND clock_in < CURRENT_DATE + INTERVAL '1 day'
+         AND ${localDateSql('clock_in')} BETWEEN ${TODAY_SQL} - 6 AND ${TODAY_SQL}
          AND clock_out IS NOT NULL`,
       [staff.id]
     );
@@ -470,8 +468,7 @@ router.post('/staff/payroll/tips-distribution', verifyAdmin, async (req, res) =>
      FROM staff s
      INNER JOIN time_clock tc ON s.id = tc.staff_id
      WHERE s.activo = 1
-       AND tc.clock_in >= CURRENT_DATE - INTERVAL '6 days'
-       AND tc.clock_in < CURRENT_DATE + INTERVAL '1 day'
+       AND ${localDateSql('tc.clock_in')} BETWEEN ${TODAY_SQL} - 6 AND ${TODAY_SQL}
        AND tc.clock_out IS NOT NULL
      ORDER BY s.nombre`
   );
@@ -500,8 +497,7 @@ router.post('/staff/payroll/tips-distribution', verifyAdmin, async (req, res) =>
              COALESCE(SUM(EXTRACT(EPOCH FROM (clock_out - clock_in)) / 3600 - (total_break_minutes / 60.0)), 0) as total_hours
          FROM time_clock
          WHERE staff_id = $1
-           AND clock_in >= CURRENT_DATE - INTERVAL '6 days'
-           AND clock_in < CURRENT_DATE + INTERVAL '1 day'
+           AND ${localDateSql('clock_in')} BETWEEN ${TODAY_SQL} - 6 AND ${TODAY_SQL}
            AND clock_out IS NOT NULL`,
         [staff.id]
       );
