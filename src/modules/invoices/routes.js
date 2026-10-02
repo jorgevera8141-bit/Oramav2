@@ -17,8 +17,8 @@ router.get('/factura/status', (_req, res) => {
 });
 
 router.post('/factura', requireFacturacionEnabled, validate(facturaSchema), async (req, res) => {
-  const invoice = await createInvoice(req.body);
-  res.status(201).json({ success: true, factura: invoice });
+  const { invoice, created } = await createInvoice(req.body);
+  res.status(created ? 201 : 200).json({ success: true, factura: invoice, ya_existia: !created });
 });
 
 router.get('/factura/:id/pdf', requireFacturacionEnabled, async (req, res) => {
