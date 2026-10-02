@@ -98,6 +98,49 @@ test('compra_x_lleva_y grants zero free units below the threshold', () => {
   assert.equal(result.total, 40);
 });
 
+test('compra_x_lleva_y buy-1-get-1 on the same item never discounts a unit that was needed to qualify', () => {
+  const promo = basePromo({
+    id: 4, tipo: 'compra_x_lleva_y', producto_ids: [5], compra_cantidad: 1,
+    lleva_producto_id: 5, lleva_cantidad: 1, lleva_descuento_pct: 100
+  });
+  const run = (cantidad) => applyPromotions({
+    items: [{ menu_item_id: 5, nombre: 'Americano', categoria: 'Café', precio: 40, cantidad }],
+    promotions: [promo], now: NOW
+  });
+  assert.equal(run(1).total, 40, 'a single unit has nothing to pair with and must be paid');
+  assert.equal(run(2).total, 40, 'two units -> one paid, one free');
+  assert.equal(run(3).total, 80, 'three units -> one pair (one free) plus one unpaired');
+  assert.equal(run(4).total, 80, 'four units -> two pairs, two free');
+});
+
+test('compra_x_lleva_y buy-2-get-1 on the same item needs three units before anything is free', () => {
+  const promo = basePromo({
+    id: 4, tipo: 'compra_x_lleva_y', producto_ids: [5], compra_cantidad: 2,
+    lleva_producto_id: 5, lleva_cantidad: 1, lleva_descuento_pct: 100
+  });
+  const run = (cantidad) => applyPromotions({
+    items: [{ menu_item_id: 5, nombre: 'Americano', categoria: 'Café', precio: 40, cantidad }],
+    promotions: [promo], now: NOW
+  });
+  assert.equal(run(2).descuento_total, 0);
+  assert.equal(run(3).descuento_total, 40);
+  assert.equal(run(6).descuento_total, 80);
+});
+
+test('compra_x_lleva_y with a different get-product still rewards one free unit per qualifying set', () => {
+  const promo = basePromo({
+    id: 4, tipo: 'compra_x_lleva_y', producto_ids: [5], compra_cantidad: 2,
+    lleva_producto_id: 9, lleva_cantidad: 1, lleva_descuento_pct: 100
+  });
+  const items = [
+    { menu_item_id: 5, nombre: 'Americano', categoria: 'Café', precio: 40, cantidad: 2 },
+    { menu_item_id: 9, nombre: 'Galleta', categoria: 'Repostería', precio: 25, cantidad: 1 }
+  ];
+  const result = applyPromotions({ items, promotions: [promo], now: NOW });
+  assert.equal(result.total, 80);
+  assert.equal(result.descuento_total, 25);
+});
+
 test('non-stacking default: the more specific (product-scoped) promotion wins over a category-wide one', () => {
   const productPromo = basePromo({ id: 1, tipo: 'descuento_porcentaje', producto_ids: [1], porcentaje_descuento: 50 });
   const categoryPromo = basePromo({ id: 2, tipo: 'descuento_porcentaje', categoria: 'Café', porcentaje_descuento: 10 });

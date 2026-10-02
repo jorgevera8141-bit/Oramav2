@@ -132,11 +132,17 @@ function applyPromotions({ items, promotions, now = new Date(), redemptionCounts
     } else if (promo.tipo === 'compra_x_lleva_y') {
       const scopeIds = Array.isArray(promo.producto_ids) ? promo.producto_ids : [];
       const buyQty = working.filter((l) => scopeIds.includes(l.menu_item_id)).reduce((sum, l) => sum + l.unclaimed, 0);
-      const sets = Math.floor(buyQty / promo.compra_cantidad);
-      if (sets < 1) continue;
-      const getQtyEligible = sets * promo.lleva_cantidad;
       const getLine = working.find((l) => l.menu_item_id === promo.lleva_producto_id);
       if (!getLine || getLine.unclaimed < 1) continue;
+      // When the free product is also part of the qualifying scope (2x1 on the same
+      // item), the free units come out of the same pool as the paid ones, so each set
+      // needs compra_cantidad paid units PLUS lleva_cantidad free ones. Counting the
+      // free units as purchases made every unit in the cart free.
+      const getInBuyScope = scopeIds.includes(promo.lleva_producto_id);
+      const unitsPerSet = promo.compra_cantidad + (getInBuyScope ? promo.lleva_cantidad : 0);
+      const sets = Math.floor(buyQty / unitsPerSet);
+      if (sets < 1) continue;
+      const getQtyEligible = sets * promo.lleva_cantidad;
       const qtyToDiscount = Math.min(getQtyEligible, getLine.unclaimed, budget);
       if (qtyToDiscount < 1) continue;
       const descuentoUnitario = round2(Number(getLine.precio) * (Number(promo.lleva_descuento_pct) / 100));
