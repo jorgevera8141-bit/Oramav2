@@ -53,4 +53,4 @@
 .loyalty-customer-name{margin:0 0 2px;text-align:center;color:var(--cream);font:600 20px 'Playfair Display',Georgia,serif}
 .loyalty-customer-phone{margin:0 0 18px;text-align:center;color:var(--muted);font:12px 'JetBrains Mono',monospace}
 .loyalty-switch{display:block;margin:16px auto 0;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer}
-.loyalty-footer{margin-top:14px;text-align:center;color:var(--muted);font-size:11px}
+.loyalty-footer{margin-top:14px;text-align:center;color:var(--muted);font-size:12px}
