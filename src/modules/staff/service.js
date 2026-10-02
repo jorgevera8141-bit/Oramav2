@@ -205,7 +205,69 @@ async function getHoursSummary(range, db = pool, now = new Date()) {
   return summarizeSessionRows(rows, range, now);
 }
 
+function tipsError(message) {
+  return Object.assign(new Error(message), { statusCode: 400 });
+}
+
+// Splits `totalCents` across `weights` so the parts are whole cents that add up to the
+// total exactly (largest-remainder), instead of rounding each share and losing or
+// inventing a few cents.
+function allocateCents(totalCents, weights) {
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
+  const raw = weights.map((weight) => (totalCents * weight) / weightSum);
+  const parts = raw.map(Math.floor);
+  let leftover = totalCents - parts.reduce((sum, part) => sum + part, 0);
+  const byLargestFraction = raw.map((value, index) => ({ index, fraction: value - parts[index] }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+  for (let i = 0; leftover > 0; i += 1, leftover -= 1) parts[byLargestFraction[i % byLargestFraction.length].index] += 1;
+  return parts;
+}
+
+function resolvePercentageWeights(staffRows, percentages) {
+  if (!percentages || typeof percentages !== 'object') throw tipsError('Se requieren los porcentajes por empleado.');
+  const byId = new Map();
+  for (const [id, raw] of Object.entries(percentages)) {
+    const value = raw === '' || raw == null ? 0 : Number(raw);
+    if (!Number.isFinite(value) || value < 0) throw tipsError('Los porcentajes deben ser números de 0 o más.');
+    byId.set(String(id), value);
+  }
+  const workedIds = new Set(staffRows.map((row) => String(row.id)));
+  for (const [id, value] of byId) {
+    if (value > 0 && !workedIds.has(id)) throw tipsError('Se asignó un porcentaje a alguien que no trabajó esta semana.');
+  }
+  const weights = staffRows.map((row) => byId.get(String(row.id)) || 0);
+  if (Math.abs(weights.reduce((sum, weight) => sum + weight, 0) - 100) > 0.01) {
+    throw tipsError('Los porcentajes deben sumar 100%.');
+  }
+  return weights;
+}
+
+// staffRows: [{ id, nombre, tipo, hours }] for staff who clocked out during the week.
+function distributeTips({ tips, distributionType, staffRows, percentages }) {
+  const hours = staffRows.map((row) => Number(row.hours) || 0);
+  let weights;
+  if (distributionType === 'equal') {
+    weights = staffRows.map(() => 1);
+  } else if (distributionType === 'hours_worked') {
+    weights = hours.some((value) => value > 0) ? hours : staffRows.map(() => 1);
+  } else if (distributionType === 'percentage') {
+    weights = resolvePercentageWeights(staffRows, percentages);
+  } else {
+    throw tipsError('Tipo de distribución inválido.');
+  }
+  const cents = allocateCents(Math.round(tips * 100), weights);
+  return staffRows.map((row, index) => ({
+    staffId: row.id,
+    nombre: row.nombre,
+    tipo: row.tipo,
+    amount: cents[index] / 100,
+    ...(distributionType === 'hours_worked' ? { hoursWorked: Number(hours[index].toFixed(2)) } : {}),
+    ...(distributionType === 'percentage' ? { percentage: weights[index] } : {})
+  }));
+}
+
 module.exports = {
+  distributeTips,
   normalizeDateRange,
   sessionDurationMinutes,
   sessionRangeMinutes,

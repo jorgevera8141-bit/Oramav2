@@ -786,6 +786,14 @@ async function nomina() {
           return;
         }
 
+        // Percentage mode: send what the inputs say; the server checks they add up to 100.
+        const percentages = {};
+        if (distributionType === 'percentage') {
+          app.querySelectorAll('#tips-percentage-container input[data-staff-id]').forEach((input) => {
+            percentages[input.dataset.staffId] = parseFloat(input.value) || 0;
+          });
+        }
+
         try {
           const response = await api('/api/staff/payroll/tips-distribution', {
             method: 'POST',
@@ -793,6 +801,7 @@ async function nomina() {
             body: JSON.stringify({
               tips_amount: tipsAmount,
               distribution_type: distributionType,
+              ...(distributionType === 'percentage' ? { percentages } : {}),
               nombre,
               pin
             })
@@ -825,7 +834,7 @@ async function nomina() {
             Orama.toast(response.error || 'Error al calcular distribución', 'error');
           }
         } catch (error) {
-          Orama.toast('Error de conexión', 'error');
+          Orama.toast(error.message || 'Error de conexión', 'error');
           console.error(error);
         }
       });
