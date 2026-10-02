@@ -16,6 +16,7 @@ const socialPostsRoutes = require('./modules/social-posts/routes');
 const uploadsRoutes = require('./modules/uploads/routes');
 const loyaltyRoutes = require('./modules/loyalty/routes');
 const pricingRoutes = require('./modules/pricing/routes');
+const { createGate } = require('./middleware/gate');
 
 const app = express();
 
@@ -23,6 +24,11 @@ const app = express();
 // (the rate limiter keys on it) instead of the proxy's.
 app.set('trust proxy', 1);
 
+app.use(createGate({
+  passcode: process.env.GATE_PASSCODE,
+  previous: process.env.GATE_PASSCODE_PREVIOUS,
+  isProduction: process.env.NODE_ENV === 'production'
+}));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
