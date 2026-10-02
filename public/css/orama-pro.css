@@ -123,3 +123,6 @@ main{position:relative;z-index:1}
 
 /* Page headings sit directly on the bean photo: a soft shadow keeps eyebrow, title and subtitle legible. */
 .page-head .eyebrow,.page-head h1,.page-head .subtle{text-shadow:0 1px 12px rgba(0,0,0,.75)}
+
+/* A page action (e.g. "Nueva orden") drops below the title on small phones instead of squeezing it. */
+@media(max-width:480px){.page-head{flex-wrap:wrap;align-items:flex-start}.page-head .button{width:100%}}
