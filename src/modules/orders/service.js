@@ -24,6 +24,36 @@ function aggregatePagos(pagos) {
   }), { amount_cash: 0, amount_card: 0 });
 }
 
+const CASH_CARD_METHODS = ['efectivo', 'tarjeta', 'mixto'];
+const AMOUNT_TOLERANCE = 0.01;
+
+function closeError(message, statusCode = 400) {
+  return Object.assign(new Error(message), { statusCode });
+}
+
+// Rejects closes that would otherwise settle an order without paying or redeeming:
+// a loyalty "payment" with no customer/PIN (skipped the redemption entirely), no
+// payment method at all, or cash/card amounts that don't cover the total. Split
+// payments (pagos) and cortesia keep their existing handling.
+function assertValidClosePayment(order, payload = {}) {
+  const method = payload.payment_method;
+  const hasSplitPayments = Array.isArray(payload.pagos) && payload.pagos.length > 0;
+  if (hasSplitPayments) return;
+  if (!method) throw closeError('Se requiere el método de pago para cerrar la orden.');
+  if (method === 'cliente_frecuente') {
+    if (!payload.loyalty_customer_id || !payload.actor_nombre || !payload.actor_pin) {
+      throw closeError('El canje de cliente frecuente requiere el cliente y el PIN del staff.');
+    }
+    return;
+  }
+  if (CASH_CARD_METHODS.includes(method)) {
+    const paid = Number(payload.amount_cash || 0) + Number(payload.amount_card || 0);
+    if (paid + AMOUNT_TOLERANCE < Number(order.total)) {
+      throw closeError('El pago no cubre el total de la orden.');
+    }
+  }
+}
+
 async function closeOrder(orderId, payload = {}) {
   const client = await pool.connect();
   try {
@@ -33,6 +63,8 @@ async function closeOrder(orderId, payload = {}) {
     if (!order) throw Object.assign(new Error('Orden no encontrada'), { statusCode: 404 });
     if (order.status === 'cerrada') { await client.query('COMMIT'); return order; }
     if (order.status === 'cancelada') throw Object.assign(new Error('La orden está cancelada'), { statusCode: 409 });
+
+    assertValidClosePayment(order, payload);
 
     // Redeem the loyalty reward inside this same transaction (not via a separate
     // request) so a failure closing the order also rolls back the redemption —
@@ -82,4 +114,4 @@ async function closeOrder(orderId, payload = {}) {
   } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
 }
 
-module.exports = { closeOrder, deductInventoryForOrder, aggregatePagos };
+module.exports = { closeOrder, deductInventoryForOrder, aggregatePagos, assertValidClosePayment };
