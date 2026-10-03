@@ -16,4 +16,11 @@ function salesSql(alias = 'ordenes') {
   return `(${alias}.total - ${compValueSql(alias)})`;
 }
 
-module.exports = { compValueSql, salesSql };
+// The share of an order's price that was actually paid: 1 for a normal order, 0 for a fully comped one,
+// and in between for a split with a comped person (two coffees, one free: 0.5). Product revenue is
+// weighted by this so it adds up to the same sales as the corte and the profit report.
+function paidFractionSql(alias = 'ordenes') {
+  return `COALESCE(${salesSql(alias)} / NULLIF(${alias}.total, 0), 1)`;
+}
+
+module.exports = { compValueSql, salesSql, paidFractionSql };

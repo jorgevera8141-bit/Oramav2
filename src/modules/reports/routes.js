@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../../config/database');
 const { parseDateParam, previousEqualPeriod } = require('../../shared/dates');
 const { localDateSql, localTimestampSql, TODAY_SQL } = require('../../shared/timezone');
-const { compValueSql, salesSql } = require('../../shared/comps');
+const { compValueSql, salesSql, paidFractionSql } = require('../../shared/comps');
 
 const router = express.Router();
 
@@ -85,7 +85,7 @@ router.get('/reportes/v2', async (req, res) => {
   );
 
   const { rows: categorias } = await pool.query(
-    `SELECT mi.categoria, COALESCE(SUM(oi.cantidad),0)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio),0) AS total
+    `SELECT mi.categoria, COALESCE(SUM(oi.cantidad),0)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio * ${paidFractionSql('o')}),0) AS total
      FROM orden_items oi
      JOIN ordenes o ON o.id = oi.orden_id
      JOIN menu_items mi ON mi.id = ${LINE_MENU_ITEM_SQL}
@@ -96,7 +96,7 @@ router.get('/reportes/v2', async (req, res) => {
   );
 
   const { rows: topQty } = await pool.query(
-    `SELECT oi.item_nombre, SUM(oi.cantidad)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio),0) AS ingreso
+    `SELECT oi.item_nombre, SUM(oi.cantidad)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio * ${paidFractionSql('o')}),0) AS ingreso
      FROM orden_items oi JOIN ordenes o ON o.id = oi.orden_id
      WHERE o.status = 'cerrada' AND ${localDateSql('o.closed_at')} BETWEEN $1 AND $2
        AND COALESCE(o.payment_method, '') NOT IN ('cortesia', 'cliente_frecuente')
@@ -105,7 +105,7 @@ router.get('/reportes/v2', async (req, res) => {
   );
 
   const { rows: topIngreso } = await pool.query(
-    `SELECT oi.item_nombre, SUM(oi.cantidad)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio),0) AS ingreso
+    `SELECT oi.item_nombre, SUM(oi.cantidad)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio * ${paidFractionSql('o')}),0) AS ingreso
      FROM orden_items oi JOIN ordenes o ON o.id = oi.orden_id
      WHERE o.status = 'cerrada' AND ${localDateSql('o.closed_at')} BETWEEN $1 AND $2
        AND COALESCE(o.payment_method, '') NOT IN ('cortesia', 'cliente_frecuente')
