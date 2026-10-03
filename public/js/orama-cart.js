@@ -109,7 +109,7 @@ async function nuevaOrden() {
 
   function renderMesaStep() {
     app.innerHTML = pageHead('Nueva orden', 'Elige una mesa', 'Selecciona dónde se sirve esta orden') +
-      `<section class="mesa-grid">${mesas.length ? mesas.map((mesa) => `<button type="button" class="mesa-card selectable ${mesa.status === 'ocupada' ? 'occupied' : ''}" data-mesa-id="${mesa.id}" data-mesa-nombre="${escapeHtml(mesa.nombre)}"><h2 class="mesa-name">${escapeHtml(mesa.nombre)}</h2>${statusBadge(mesa.status)}</button>`).join('') : '<div class="empty">No hay mesas configuradas</div>'}</section>`;
+      `<section class="mesa-grid">${mesas.length ? mesas.map((mesa) => `<button type="button" class="mesa-card selectable ${mesa.status === 'ocupada' ? 'occupied' : ''}" data-mesa-id="${mesa.id}" data-mesa-nombre="${escapeHtml(mesa.nombre)}"><h2 class="mesa-name">${escapeHtml(mesa.nombre)}</h2>${statusBadge(mesa.status)}${mesa.status === 'ocupada' ? '<p class="subtle" style="margin:8px 0 0;font-size:12px">Ya tiene una orden abierta; esta será otra.</p>' : ''}</button>`).join('') : '<div class="empty">No hay mesas configuradas</div>'}</section>`;
   }
 
   function renderMenuStep() {
