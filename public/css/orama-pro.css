@@ -141,3 +141,13 @@ main{position:relative;z-index:1}
   .stack-table td.empty::before{content:none}
   .stack-table .action-row .button{flex:1;padding-inline:8px}
 }
+
+/* Short category chips with a photo (e.g. "Tes") were as narrow as their label. */
+.pill.has-photo{min-width:104px}
+
+/* On phones the nav scrolls sideways; keep "Más" pinned at the right edge so the staff, payroll and
+   finance pages are always reachable. Only the left edge fades, so the pinned button is not masked. */
+@media(max-width:767px){
+  .main-nav{padding-right:0;mask-image:linear-gradient(to right,transparent,#000 8%)}
+  .main-nav .nav-more{position:sticky;right:0;z-index:2;flex:none;padding-left:var(--space-3);background:linear-gradient(to right,transparent,rgba(15,13,11,.94) 24%)}
+}
