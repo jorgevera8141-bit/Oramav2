@@ -199,3 +199,9 @@ main{position:relative;z-index:1}
 .status-strip-item{margin:0;color:var(--muted);font-size:14px}
 .status-strip-value{margin-right:4px;color:var(--cream);font:600 22px/1 var(--mono);font-variant-numeric:tabular-nums}
 .status-strip .button{margin-left:auto}
+.order-card-total{font-size:18px;font-weight:600;color:var(--cream)}
+.order-card-meta{margin:0 0 var(--space-3);color:var(--muted);font-size:13px}
+.order-card.urgent .order-card-meta{color:var(--amber)}
+.order-card-actions{display:grid;grid-template-columns:2fr 1fr;gap:var(--space-2)}
+.order-card-actions .button{width:100%}
+.order-card-cancel{margin-top:var(--space-4);width:100%;min-height:44px;font-size:14px}
