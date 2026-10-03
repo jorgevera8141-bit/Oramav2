@@ -21,6 +21,9 @@ function apiErrorMessage(data) {
   const parts = form.concat(fields);
   return parts.length ? `${base}: ${parts.join(' · ')}` : base;
 }
+// Pay data (rates, payroll, every shift) is served only to a manager, who proves it with their name and PIN
+// on each request. They go in headers so a PIN never ends up in a URL or a request log.
+const managerHeaders = ({ nombre, pin }) => ({ 'X-Actor-Nombre': encodeURIComponent(nombre), 'X-Actor-Pin': pin });
 async function api(path, options) { const response = await fetch(path, options); const data = await response.json(); if (!response.ok || data.success === false) { const error = new Error(apiErrorMessage(data)); error.status = response.status; throw error; } return data; }
 function pageHead(eyebrow, title, subtitle = '', photo = '', action = '') { const head = `<div class="page-head"><div><p class="eyebrow">${escapeHtml(eyebrow)}</p><h1>${escapeHtml(title)}</h1>${subtitle ? `<p class="subtle">${escapeHtml(subtitle)}</p>` : ''}</div>${action}</div>`; return photo ? `<div class="hero-banner" style="background-image:url('${photo}')">${head}</div>` : head; }
 function statusBadge(status) { const map = { disponible: 'available', ocupada: 'occupied', cerrada: 'closed', cancelada: 'cancelled' }; return `<span class="badge ${map[status] || ''}">${escapeHtml(status)}</span>`; }
