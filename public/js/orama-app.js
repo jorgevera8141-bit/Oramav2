@@ -1013,6 +1013,7 @@ async function loadCorregirTab(nombre, pin) {
 // The manager who opened the Calculadora. Its routes are manager-only and check name and PIN on every request;
 // the calculate request used to send neither, so "Calcular Precio" was always refused. Cleared on leaving the page.
 let pricingAuth = null;
+let pricingSettings = null;
 
 async function pricing() {
   // Check if user is management via PIN
@@ -1041,20 +1042,36 @@ async function pricing() {
         <div class="tab-content" id="calculator-tab">
           <h3>Calculadora de Costos</h3>
           <div class="form-section" id="taxSettings">
-            <label>IVA</label>
+            <label>Ajustes del negocio (se guardan para todos los cálculos)</label>
             <div class="cost-grid">
               <div>
                 <label for="ivaRate">Tasa de IVA (%):</label>
                 <input type="number" id="ivaRate" min="0" max="100" step="0.1" value="16">
               </div>
               <div>
+                <label for="cardFeePct">Comisión de la terminal (%):</label>
+                <input type="number" id="cardFeePct" min="0" max="20" step="0.01" value="0">
+              </div>
+              <div>
+                <label for="cardSharePct">Ventas que se pagan con tarjeta (%):</label>
+                <input type="number" id="cardSharePct" min="0" max="100" step="1" value="0">
+              </div>
+              <div>
+                <label for="paidPerFree">Bebidas pagadas por cada gratis:</label>
+                <input type="number" id="paidPerFree" min="0" step="1" value="0">
+              </div>
+              <div>
+                <label for="roundTo">Redondear el precio de menú a ($):</label>
+                <input type="number" id="roundTo" min="0" step="0.5" value="0">
+              </div>
+              <div>
                 <label><input type="checkbox" id="pricesIncludeIva" checked> Los precios de mi menú ya incluyen IVA</label>
               </div>
               <div>
-                <button type="button" class="button" id="saveTaxBtn">Guardar IVA</button>
+                <button type="button" class="button" id="saveTaxBtn">Guardar ajustes</button>
               </div>
             </div>
-            <p class="subtle">Los márgenes se calculan sobre el precio sin IVA, que es lo que realmente gana el negocio. Un precio de $43 con IVA del 16% deja $37.07.</p>
+            <p class="subtle">Los márgenes se calculan sobre el precio sin IVA, que es lo que realmente gana el negocio. Un precio de $43 con IVA del 16% deja $37.07. La comisión de la terminal y las bebidas gratis del programa de lealtad (ej. 10 pagadas y 1 gratis) se suman al costo para que el precio las cubra. Con 0 no se agregan. Los costos fijos de abajo se guardan con este botón.</p>
           </div>
           <div class="form-section">
             <label for="productSelect">Producto existente:</label>
@@ -1110,7 +1127,7 @@ async function pricing() {
             </div>
           </div>
           <div class="form-section">
-            <label>Costos fijos mensuales (para el precio de costo completo):</label>
+            <label>Costos fijos mensuales de todo el café (se reparten entre todas las unidades que vende, no solo este producto):</label>
             <div class="cost-grid">
               <div>
                 <label>Renta (MXN):</label>
@@ -1129,8 +1146,9 @@ async function pricing() {
                 <input type="number" id="fixedOther" step="0.01" min="0" value="0">
               </div>
               <div>
-                <label>Unidades vendidas al mes (estimado):</label>
+                <label>Unidades totales que vende TODO el café al mes (todos los productos):</label>
                 <input type="number" id="estimatedMonthlyUnits" step="1" min="0" value="0">
+                <button type="button" class="button small" id="useObservedUnitsBtn">Usar ventas reales (30 días)</button>
               </div>
             </div>
           </div>
@@ -1197,8 +1215,14 @@ async function pricing() {
     // IVA setting (this whole page is managers-only; the save re-checks the manager PIN on the server)
     try {
       const { settings } = await api('/api/pricing/settings');
+      pricingSettings = settings;
       document.getElementById('ivaRate').value = settings.ivaRate;
       document.getElementById('pricesIncludeIva').checked = settings.pricesIncludeIva;
+      document.getElementById('cardFeePct').value = settings.cardFeePct;
+      document.getElementById('cardSharePct').value = settings.cardSharePct;
+      document.getElementById('paidPerFree').value = settings.paidPerFree;
+      document.getElementById('roundTo').value = settings.roundTo;
+      document.getElementById('useObservedUnitsBtn').textContent = `Usar ventas reales (${settings.observedMonthlyUnits} en 30 días)`;
     } catch (error) {
       console.error(error);
     }
@@ -1207,9 +1231,9 @@ async function pricing() {
         await api('/api/pricing/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre, pin, ivaRate: parseFloat(document.getElementById('ivaRate').value) || 0, pricesIncludeIva: document.getElementById('pricesIncludeIva').checked })
+          body: JSON.stringify({ nombre, pin, ...readBusinessSettingsForm() })
         });
-        Orama.toast('IVA guardado', 'success');
+        Orama.toast('Ajustes guardados', 'success');
       } catch (error) {
         Orama.toast(error.message, 'error');
       }
@@ -1222,6 +1246,11 @@ async function pricing() {
 
     // Remember monthly fixed costs between visits (rent/phone/payroll rarely change)
     restoreFixedCostInputs();
+    applySavedFixedCosts(pricingSettings);
+    document.getElementById('useObservedUnitsBtn').addEventListener('click', () => {
+      document.getElementById('estimatedMonthlyUnits').value = pricingSettings?.observedMonthlyUnits || 0;
+      saveFixedCostInputs();
+    });
     ['fixedRent', 'fixedPhone', 'fixedPayroll', 'fixedOther', 'estimatedMonthlyUnits', 'laborRatePerHour'].forEach((id) => {
       document.getElementById(id).addEventListener('change', saveFixedCostInputs);
     });
@@ -1235,6 +1264,29 @@ async function pricing() {
 
 // Helper functions for the pricing interface
 const FIXED_COST_STORAGE_KEY = 'orama-pricing-fixed-costs';
+
+function readBusinessSettingsForm() {
+  const number = (id) => parseFloat(document.getElementById(id).value) || 0;
+  return {
+    ivaRate: number('ivaRate'),
+    pricesIncludeIva: document.getElementById('pricesIncludeIva').checked,
+    cardFeePct: number('cardFeePct'),
+    cardSharePct: number('cardSharePct'),
+    paidPerFree: number('paidPerFree'),
+    roundTo: number('roundTo'),
+    fixedCosts: { rent: number('fixedRent'), phoneInternet: number('fixedPhone'), payroll: number('fixedPayroll'), other: number('fixedOther') }
+  };
+}
+
+// Overhead saved on the server is the same on every device; it wins over what this browser remembered.
+function applySavedFixedCosts(settings) {
+  const fixed = settings?.fixedCosts;
+  if (!fixed || !Object.values(fixed).some((value) => value > 0)) return;
+  document.getElementById('fixedRent').value = fixed.rent;
+  document.getElementById('fixedPhone').value = fixed.phoneInternet;
+  document.getElementById('fixedPayroll').value = fixed.payroll;
+  document.getElementById('fixedOther').value = fixed.other;
+}
 
 function saveFixedCostInputs() {
   try {
@@ -1281,6 +1333,7 @@ function ingredientRowMarkup() {
     <input type="number" class="unit-cost" placeholder="Costo" step="0.01" min="0" aria-label="Costo del insumo">
     <span class="ingredient-cost-label">por</span>
     <select class="cost-unit" aria-label="El costo es por">${unitOptions('kg')}</select>
+    <input type="number" class="yield-pct" placeholder="Rend. %" step="1" min="1" max="100" title="Rendimiento: % de lo que compras que sí usas (merma). Vacío = 100" aria-label="Rendimiento en porcentaje">
     <button class="button small danger" type="button" onclick="removeIngredient(this)" aria-label="Quitar insumo">-</button>
   `;
 }
@@ -1340,6 +1393,7 @@ async function calculatePrice() {
       const unit = unitInput.value;
       const costUnit = costUnitInput.value;
       const unitCost = parseFloat(costInput.value) || 0;
+      const yieldPct = parseFloat(row.querySelector('.yield-pct').value);
 
       if (!name) {
         hasError = true;
@@ -1362,7 +1416,7 @@ async function calculatePrice() {
         costInput.style.borderColor = '';
       }
 
-      ingredients.push({ ingredientName: name, quantityPerServing: quantity, unit, costUnit, unitCost });
+      ingredients.push({ ingredientName: name, quantityPerServing: quantity, unit, costUnit, unitCost, ...(yieldPct > 0 ? { yieldPct } : {}) });
     });
 
     if (hasError) {
@@ -1470,6 +1524,22 @@ function showResults(result) {
         <label>Diferencia vs. el precio del menú:</label>
         <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}${money.format(result.savingsOrShortfall)}</p>
       </div>
+      ${result.roundedMenuPrice !== null ? `
+      <div>
+        <label>Precio de menú redondeado:</label>
+        <p class="price-label">${money.format(result.roundedMenuPrice)}</p>
+        <p class="subtle">Deja ${result.marginAtRoundedPrice.toFixed(1)}% de margen</p>
+      </div>` : ''}
+      ${result.compsCostPerServing > 0 ? `
+      <div>
+        <label>Bebidas gratis (lealtad), por bebida pagada:</label>
+        <p class="price-label">${money.format(result.compsCostPerServing)}</p>
+      </div>` : ''}
+      ${result.cardFeeRatePct > 0 ? `
+      <div>
+        <label>Comisión de tarjeta (% del precio sin IVA):</label>
+        <p class="price-label">${result.cardFeeRatePct.toFixed(2)}%</p>
+      </div>` : ''}
     </div>
 
     <h3 class="mt-4">Costo primo (Prime Cost)</h3>
@@ -1499,7 +1569,7 @@ function showResults(result) {
 
     ${result.fullCostSellingPrice !== null && result.fullCostSellingPrice !== undefined ? `
       <h3 class="mt-4">Precio de costo completo (incluye renta, teléfono y nómina fija)</h3>
-      <p class="subtle">Costos fijos mensuales: ${money.format(result.totalMonthlyFixedCosts)} ÷ ${result.estimatedMonthlyUnits} unidades/mes = ${money.format(result.fixedCostPerUnit)} de costo fijo por unidad</p>
+      <p class="subtle">Costos fijos mensuales de todo el café: ${money.format(result.totalMonthlyFixedCosts)} ÷ ${result.estimatedMonthlyUnits} unidades totales al mes = ${money.format(result.fixedCostPerUnit)} de costo fijo por unidad</p>
       <div class="results-grid">
         <div>
           <label>Costo completo por porción:</label>

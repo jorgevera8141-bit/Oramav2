@@ -176,6 +176,7 @@ main{position:relative;z-index:1}
 .ingredient-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
 .ingredient-row .ingredient-name{flex:2 1 180px}
 .ingredient-row .quantity,.ingredient-row .unit-cost{flex:1 1 90px;min-width:80px}
+.ingredient-row .yield-pct{flex:0 1 90px;min-width:80px}
 .ingredient-row input,.ingredient-row select{min-height:44px;padding:var(--space-2) var(--space-3);border:1px solid var(--espresso);border-radius:5px;background:var(--base);color:var(--cream)}
 .ingredient-cost-label{color:var(--muted);font-size:13px}
 
