@@ -11,7 +11,8 @@ const ingredientLineSchema = z.object({
   inventoryItemId: z.number().int().positive().optional(), // If from inventory
   ingredientName: z.string().optional(), // If manual entry
   quantityPerServing: z.number().positive(),
-  unit: z.string(), // e.g., 'g', 'ml', 'pieza', 'unidad'
+  unit: z.string(), // the unit the quantity is in: kg, g, litro, ml, pieza
+  costUnit: z.string().optional(), // the unit the cost is quoted in (defaults to `unit`); converted from `unit`
   unitCost: z.number().nonnegative().optional() // If known, otherwise will be looked up
 });
 
@@ -48,7 +49,7 @@ const priceCalculationSchema = z.object({
   preparation: preparationSchema.default({}),
   fixedCosts: fixedCostsSchema.default({}),
   estimatedMonthlyUnits: z.number().positive().optional(), // omit to skip full-cost pricing
-  targetMargin: z.number().nonnegative().max(1000).default(30), // percent
+  targetMargin: z.number().min(0).lt(100, 'El margen objetivo debe ser menor a 100%.').default(30), // percent
   includeIVA: z.boolean().default(true)
 });
 
@@ -77,6 +78,12 @@ const priceCalculationResultSchema = z.object({
   breakEvenUnits: z.number().int().nonnegative().nullable()
 });
 
+// Tax settings: the IVA rate (percent) and whether menu prices already include it
+const taxSettingsSchema = z.object({
+  ivaRate: z.number().min(0).max(100),
+  pricesIncludeIva: z.boolean()
+});
+
 // Recipe save schema
 const recipeSaveSchema = z.object({
   menuItemId: z.number().int().positive(),
@@ -86,7 +93,7 @@ const recipeSaveSchema = z.object({
     quantityUsed: z.number().positive()
   })),
   extraCosts: extraCostsSchema,
-  targetMargin: z.number().nonnegative().max(1000),
+  targetMargin: z.number().min(0).lt(100, 'El margen objetivo debe ser menor a 100%.'),
   includeIVA: z.boolean()
 });
 
@@ -98,5 +105,6 @@ module.exports = {
   preparationSchema,
   priceCalculationSchema,
   priceCalculationResultSchema,
+  taxSettingsSchema,
   recipeSaveSchema
 };

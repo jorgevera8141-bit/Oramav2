@@ -1010,6 +1010,10 @@ async function loadCorregirTab(nombre, pin) {
   }
 }
 
+// The manager who opened the Calculadora. Its routes are manager-only and check name and PIN on every request;
+// the calculate request used to send neither, so "Calcular Precio" was always refused. Cleared on leaving the page.
+let pricingAuth = null;
+
 async function pricing() {
   // Check if user is management via PIN
   const auth = await promptForStaffPin({ title: 'Acceso a Calculadora de Precios', subtitle: 'Solo para gerentes' });
@@ -1025,6 +1029,7 @@ async function pricing() {
       return;
     }
     if (!(await confirmManager(auth))) return;
+    pricingAuth = { nombre, pin };
 
     // Load pricing interface
     app.innerHTML = pageHead('Calculadora de Precios', 'Análisis de costos y márgenes', 'Calcula el costo de producción y sugiere precios de venta', '/images/cafe-ambiance.jpg') +
@@ -1035,6 +1040,22 @@ async function pricing() {
         </div>
         <div class="tab-content" id="calculator-tab">
           <h3>Calculadora de Costos</h3>
+          <div class="form-section" id="taxSettings">
+            <label>IVA</label>
+            <div class="cost-grid">
+              <div>
+                <label for="ivaRate">Tasa de IVA (%):</label>
+                <input type="number" id="ivaRate" min="0" max="100" step="0.1" value="16">
+              </div>
+              <div>
+                <label><input type="checkbox" id="pricesIncludeIva" checked> Los precios de mi menú ya incluyen IVA</label>
+              </div>
+              <div>
+                <button type="button" class="button" id="saveTaxBtn">Guardar IVA</button>
+              </div>
+            </div>
+            <p class="subtle">Los márgenes se calculan sobre el precio sin IVA, que es lo que realmente gana el negocio. Un precio de $43 con IVA del 16% deja $37.07.</p>
+          </div>
           <div class="form-section">
             <label for="productSelect">Producto existente:</label>
             <select id="productSelect">
@@ -1046,18 +1067,10 @@ async function pricing() {
             <input type="text" id="newProductName" placeholder="Nombre del producto">
           </div>
           <div class="form-section">
-            <label>Insumos usados y cantidad (costo por kg/litro/pieza según la unidad elegida):</label>
-            <div id="ingredientsContainer">
-              <div class="ingredient-row">
-                <input type="text" class="ingredient-name" placeholder="Nombre del insumo">
-                <input type="number" class="quantity" placeholder="Cantidad usada" step="0.01" min="0">
-                <input type="text" class="unit" placeholder="Unidad (kg, litro, g, ml, pieza)" value="pieza">
-                <input type="number" class="unit-cost" placeholder="Costo por kg/litro/pieza" step="0.01" min="0">
-                <button class="button small" type="button" onclick="removeIngredient(this)">-</button>
-              </div>
-            </div>
+            <label>Insumos: cuánto usas por porción y cuánto cuesta, como lo compras:</label>
+            <div id="ingredientsContainer"></div>
             <button class="button secondary" type="button" onclick="addIngredientField()">+ Agregar insumo</button>
-            <p class="subtle">Ejemplo: si el café cuesta $220 por kg y usas 20g, pon Unidad = "kg" y Cantidad usada = 0.02 (20g = 0.02kg).</p>
+            <p class="subtle">Ejemplo: usas 18 g de café que compras a $450 por kg: Cantidad 18, unidad g, costo 450, "por kg". El sistema convierte las unidades solo. Todos los insumos necesitan un costo.</p>
           </div>
           <div class="form-section">
             <label>Tiempo de preparación y mano de obra:</label>
@@ -1123,7 +1136,7 @@ async function pricing() {
           </div>
           <div class="form-section">
             <label>Margen objetivo (%):</label>
-            <input type="number" id="targetMargin" step="0.1" min="0" max="1000" value="30">
+            <input type="number" id="targetMargin" step="0.1" min="0" max="99.9" value="30">
           </div>
           <div class="form-section">
             <label>
@@ -1181,6 +1194,27 @@ async function pricing() {
     document.getElementById('calculatePriceBtn').addEventListener('click', calculatePrice);
     document.getElementById('loadRecipesBtn').addEventListener('click', loadSavedRecipes);
 
+    // IVA setting (this whole page is managers-only; the save re-checks the manager PIN on the server)
+    try {
+      const { settings } = await api('/api/pricing/settings');
+      document.getElementById('ivaRate').value = settings.ivaRate;
+      document.getElementById('pricesIncludeIva').checked = settings.pricesIncludeIva;
+    } catch (error) {
+      console.error(error);
+    }
+    document.getElementById('saveTaxBtn').addEventListener('click', async () => {
+      try {
+        await api('/api/pricing/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre, pin, ivaRate: parseFloat(document.getElementById('ivaRate').value) || 0, pricesIncludeIva: document.getElementById('pricesIncludeIva').checked })
+        });
+        Orama.toast('IVA guardado', 'success');
+      } catch (error) {
+        Orama.toast(error.message, 'error');
+      }
+    });
+
     // Initialize with one ingredient row
     if (document.querySelectorAll('.ingredient-row').length === 0) {
       addIngredientField();
@@ -1192,6 +1226,7 @@ async function pricing() {
       document.getElementById(id).addEventListener('change', saveFixedCostInputs);
     });
 
+    return () => { pricingAuth = null; };
   } catch (error) {
     Orama.toast('Error al acceder a la calculadora: ' + error.message, 'error');
     console.error(error);
@@ -1228,17 +1263,39 @@ function restoreFixedCostInputs() {
   }
 }
 
+// Units are chosen from a list, never typed: the quantity ("18 g") and the unit the cost is quoted in
+// ("$450 per kg") are both explicit, and the server converts between them.
+const INGREDIENT_UNITS = ['g', 'kg', 'ml', 'litro', 'pieza'];
+const DEFAULT_COST_UNIT = { g: 'kg', kg: 'kg', ml: 'litro', litro: 'litro', pieza: 'pieza' };
+
+function unitOptions(selected) {
+  return INGREDIENT_UNITS.map((unit) => `<option value="${unit}"${unit === selected ? ' selected' : ''}>${unit}</option>`).join('');
+}
+
+function ingredientRowMarkup() {
+  return `
+    <input type="text" class="ingredient-name" placeholder="Insumo (ej. Café)" aria-label="Insumo">
+    <input type="number" class="quantity" placeholder="Cantidad" step="0.01" min="0" aria-label="Cantidad usada por porción">
+    <select class="unit" aria-label="Unidad de la cantidad" onchange="syncCostUnit(this)">${unitOptions('g')}</select>
+    <span class="ingredient-cost-label">costo $</span>
+    <input type="number" class="unit-cost" placeholder="Costo" step="0.01" min="0" aria-label="Costo del insumo">
+    <span class="ingredient-cost-label">por</span>
+    <select class="cost-unit" aria-label="El costo es por">${unitOptions('kg')}</select>
+    <button class="button small danger" type="button" onclick="removeIngredient(this)" aria-label="Quitar insumo">-</button>
+  `;
+}
+
+// Costs are usually quoted per kg, per litre or per piece: follow the quantity's unit by default.
+function syncCostUnit(select) {
+  const row = select.closest('.ingredient-row');
+  row.querySelector('.cost-unit').value = DEFAULT_COST_UNIT[select.value] || select.value;
+}
+
 function addIngredientField() {
   const container = document.getElementById('ingredientsContainer');
   const row = document.createElement('div');
   row.className = 'ingredient-row';
-  row.innerHTML = `
-    <input type="text" class="ingredient-name" placeholder="Nombre del ingrediente">
-    <input type="number" class="quantity" placeholder="Cantidad" step="0.01" min="0">
-    <input type="text" class="unit" placeholder="Unidad" value="pieza">
-    <input type="number" class="unit-cost" placeholder="Costo unitario" step="0.01" min="0">
-    <button class="button small" type="button" onclick="removeIngredient(this)">-</button>
-  `;
+  row.innerHTML = ingredientRowMarkup();
   container.appendChild(row);
 }
 
@@ -1276,10 +1333,12 @@ async function calculatePrice() {
       const quantityInput = row.querySelector('.quantity');
       const unitInput = row.querySelector('.unit');
       const costInput = row.querySelector('.unit-cost');
+      const costUnitInput = row.querySelector('.cost-unit');
 
       const name = nameInput.value.trim();
       const quantity = parseFloat(quantityInput.value) || 0;
-      const unit = unitInput.value.trim() || 'pieza';
+      const unit = unitInput.value;
+      const costUnit = costUnitInput.value;
       const unitCost = parseFloat(costInput.value) || 0;
 
       if (!name) {
@@ -1296,13 +1355,18 @@ async function calculatePrice() {
         quantityInput.style.borderColor = '';
       }
 
-      if (!ingredients.some(ing => ing.ingredientName === name && ing.unit === unit)) {
-        ingredients.push({ ingredientName: name, quantityPerServing: quantity, unit, unitCost });
+      if (unitCost <= 0) {
+        hasError = true;
+        costInput.style.borderColor = 'var(--danger)';
+      } else {
+        costInput.style.borderColor = '';
       }
+
+      ingredients.push({ ingredientName: name, quantityPerServing: quantity, unit, costUnit, unitCost });
     });
 
     if (hasError) {
-      Orama.toast('Por favor complete todos los campos de ingredientes', 'error');
+      Orama.toast('Cada insumo necesita nombre, cantidad y costo (si es casi gratis, pon 0.01)', 'error');
       return;
     }
 
@@ -1332,6 +1396,7 @@ async function calculatePrice() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        ...pricingAuth,
         productId: productId ? parseInt(productId) : undefined,
         productName: productName || undefined,
         ingredients,
@@ -1382,20 +1447,16 @@ function showResults(result) {
         <p class="price-label">${money.format(result.totalCostPerServing)}</p>
       </div>
       <div>
-        <label>Precio de venta sugerido:</label>
+        <label>Precio sugerido (sin IVA):</label>
         <p class="price-label">${money.format(result.suggestedSellingPrice)}</p>
       </div>
       <div>
-        <label>Precio con IVA:</label>
-        <p class="price-label">${money.format(result.priceWithIVA)}</p>
+        <label>Precio para el menú${result.pricesIncludeIva ? ` (con IVA ${result.ivaRate}%)` : ''}:</label>
+        <p class="price-label">${money.format(result.suggestedMenuPrice)}</p>
       </div>
       <div>
-        <label>Precio sin IVA:</label>
-        <p class="price-label">${money.format(result.priceWithoutIVA)}</p>
-      </div>
-      <div>
-        <label>Margen actual:</label>
-        <p class="price-label">${result.actualMargin.toFixed(2)}%</p>
+        <label>Margen actual (sobre el precio sin IVA):</label>
+        <p class="price-label">${result.menuPriceNet > 0 ? `${result.actualMargin.toFixed(2)}%` : 'Sin precio en el menú'}</p>
       </div>
       <div>
         <label>Margen objetivo:</label>
@@ -1403,10 +1464,10 @@ function showResults(result) {
       </div>
       <div class="${isBelowTargetClass}">
         <label>Estado:</label>
-        <p class="price-label">${result.isBelowTarget ? 'Por debajo del objetivo' : 'En o encima del objetivo'}</p>
+        <p class="price-label">${result.menuPriceNet > 0 ? (result.isBelowTarget ? 'Por debajo del objetivo' : 'En o encima del objetivo') : 'Producto nuevo'}</p>
       </div>
       <div>
-        <label>Diferencia:</label>
+        <label>Diferencia vs. el precio del menú:</label>
         <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}${money.format(result.savingsOrShortfall)}</p>
       </div>
     </div>
@@ -1431,7 +1492,7 @@ function showResults(result) {
         <p class="price-label">${money.format(result.primeCost)}</p>
       </div>
       <div class="${result.primeCostPercent > 60 ? 'alert' : 'success'}">
-        <label>Costo primo (% del precio de venta):</label>
+        <label>Costo primo (% del ${result.primeCostBasis === 'menu' ? 'precio real sin IVA' : 'precio sugerido sin IVA'}):</label>
         <p class="price-label">${result.primeCostPercent.toFixed(1)}%</p>
       </div>
     </div>
@@ -1500,12 +1561,6 @@ async function saveAsRecipe() {
         ingredients.push({ name, quantity, unit });
       }
     });
-
-    const extraCosts = {
-      packaging: parseFloat(document.getElementById('extraPackaging').value) || 0,
-      labor: parseFloat(document.getElementById('extraLabor').value) || 0,
-      other: parseFloat(document.getElementById('extraOther').value) || 0
-    };
 
     // If we have a product ID, save as recipe for that product
     if (productId) {

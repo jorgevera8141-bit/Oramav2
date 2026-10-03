@@ -171,3 +171,23 @@ main{position:relative;z-index:1}
 /* The POS keeps its faint ambient glow but does not move it: staff look at these screens for hours and a
    constantly animated blur costs battery on a tablet. The customer loyalty page keeps the drifting glow. */
 .fx-orb-field--still .fx-orb{animation:none}
+
+/* Calculadora de precios: one ingredient per row, with its unit and the unit its cost is quoted in. */
+.ingredient-row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.ingredient-row .ingredient-name{flex:2 1 180px}
+.ingredient-row .quantity,.ingredient-row .unit-cost{flex:1 1 90px;min-width:80px}
+.ingredient-row input,.ingredient-row select{min-height:44px;padding:var(--space-2) var(--space-3);border:1px solid var(--espresso);border-radius:5px;background:var(--base);color:var(--cream)}
+.ingredient-cost-label{color:var(--muted);font-size:13px}
+
+/* Calculadora de precios: the form and the results were unstyled browser defaults. */
+#calculator-tab .form-section{margin-bottom:var(--space-4)}
+#calculator-tab .form-section>label{display:block;margin-bottom:var(--space-2);color:var(--cream);font-weight:600}
+#calculator-tab input:not([type=checkbox]),#calculator-tab select{min-height:44px;padding:var(--space-2) var(--space-3);border:1px solid var(--espresso);border-radius:5px;background:var(--base);color:var(--cream)}
+#calculator-tab .cost-grid,#calculator-tab .results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3)}
+#calculator-tab .cost-grid label{display:block;margin-bottom:var(--space-1);color:var(--muted);font-size:13px}
+#calculator-tab .results-grid>div{padding:var(--space-3);border:1px solid var(--line);background:rgba(0,0,0,.15)}
+#calculator-tab .results-grid label{color:var(--muted);font-size:12px}
+#calculator-tab .price-label{margin:var(--space-1) 0 0;color:var(--cream);font:600 22px 'JetBrains Mono',monospace}
+#calculator-tab .results-grid .alert .price-label{color:var(--amber)}
+#calculator-tab .results-grid .success .price-label{color:var(--teal)}
+#calculator-tab .mt-4{margin-top:var(--space-5)}

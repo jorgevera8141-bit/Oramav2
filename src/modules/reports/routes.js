@@ -3,6 +3,8 @@ const pool = require('../../config/database');
 const { parseDateParam, previousEqualPeriod } = require('../../shared/dates');
 const { localDateSql, localTimestampSql, TODAY_SQL } = require('../../shared/timezone');
 const { compValueSql, salesSql, paidFractionSql } = require('../../shared/comps');
+const { getTaxSettings } = require('../../shared/tax');
+const { marginOnMenuPrice } = require('../pricing/calculator');
 
 const router = express.Router();
 
@@ -159,6 +161,7 @@ router.get('/reportes/margenes', async (_req, res) => {
 
   const { rows: [settingRow] } = await pool.query("SELECT value FROM orama_settings WHERE key = 'margin_threshold_pct'");
   const thresholdPct = Number(settingRow?.value || 70);
+  const tax = await getTaxSettings(pool);
 
   const { rows: [coverage] } = await pool.query(`
     SELECT COUNT(*)::int AS total,
@@ -172,13 +175,14 @@ router.get('/reportes/margenes', async (_req, res) => {
     .map((item) => {
       const precio = Number(item.precio);
       const costo = Number(item.costo);
-      const margen = precio - costo;
-      const margenPct = precio > 0 ? (margen / precio) * 100 : null;
+      // Margin on the price without IVA, which is what the café earns (menu prices include IVA).
+      const { netPrice, margin: margen, marginPct: margenPct } = marginOnMenuPrice(precio, costo, tax);
       return {
         id: item.id,
         nombre: item.nombre,
         categoria: item.categoria,
         precio,
+        precio_neto: netPrice,
         costo,
         margen,
         margen_pct: margenPct,
@@ -191,6 +195,7 @@ router.get('/reportes/margenes', async (_req, res) => {
     success: true,
     threshold_pct: thresholdPct,
     cobertura: { con_receta: coverage.con_receta, total: coverage.total, insumos_con_costo: insumos.count },
+    iva: tax,
     items: withMargin
   });
 });

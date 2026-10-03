@@ -1,4 +1,5 @@
 const pool = require('../../config/database');
+const { convertQuantity } = require('../../shared/units');
 
 /**
  * Get a product by ID from menu_items table
@@ -24,8 +25,8 @@ async function getAllProducts() {
 /**
  * Get an inventory item by ID
  */
-async function getInventoryItemById(inventoryItemId) {
-  const { rows } = await pool.query(
+async function getInventoryItemById(inventoryItemId, db = pool) {
+  const { rows } = await db.query(
     'SELECT id, name, unit, cost_per_unit AS unit_cost, current_stock FROM inventory_items WHERE id = $1',
     [inventoryItemId]
   );
@@ -44,32 +45,33 @@ async function searchInventoryItems(searchTerm) {
 }
 
 /**
- * Calculate the total cost per serving based on ingredients and extra costs
+ * Cost of the ingredients in one serving. Each line's quantity is converted to the unit its cost is
+ * quoted in (18 g of beans costed per kg is 0.018 kg), so a unit mix-up can no longer multiply a cost by
+ * 1000. An ingredient with no cost is not guessed as free: the calculation stops and names it.
  */
-async function calculateCostPerServing(ingredients, extraCosts) {
-  let totalCost = 0;
-  
-  for (const ingredient of ingredients) {
-    let unitCost = ingredient.unitCost;
-    
-    // If unit cost not provided and we have an inventory item, look it up
-    if (!unitCost && ingredient.inventoryItemId) {
-      const inventoryItem = await getInventoryItemById(ingredient.inventoryItemId);
-      if (inventoryItem) {
-        unitCost = inventoryItem.unit_cost;
+async function resolveIngredientsCost(ingredients, db = pool) {
+  const missing = [];
+  let total = 0;
+  for (const line of ingredients) {
+    let unitCost = Number(line.unitCost) || 0;
+    let costUnit = line.costUnit || line.unit;
+    if (!(unitCost > 0) && line.inventoryItemId) {
+      const item = await getInventoryItemById(line.inventoryItemId, db);
+      if (item) {
+        unitCost = Number(item.unit_cost) || 0;
+        costUnit = item.unit || costUnit;
       }
     }
-    
-    // If still no unit cost, assume 0 (should be validated)
-    if (!unitCost) unitCost = 0;
-    
-    totalCost += (unitCost || 0) * ingredient.quantityPerServing;
+    if (!(unitCost > 0)) {
+      missing.push(line.ingredientName || `insumo #${line.inventoryItemId}`);
+      continue;
+    }
+    total += unitCost * convertQuantity(line.quantityPerServing, line.unit, costUnit);
   }
-  
-  // Add extra costs
-  totalCost += extraCosts.packaging + extraCosts.labor + extraCosts.other;
-  
-  return totalCost;
+  if (missing.length) {
+    throw Object.assign(new Error(`Falta el costo de: ${missing.join(', ')}. Escríbelo para calcular el precio (si es casi gratis, pon un costo pequeño como 0.01).`), { statusCode: 400 });
+  }
+  return total;
 }
 
 /**
@@ -123,7 +125,7 @@ module.exports = {
   getAllProducts,
   getInventoryItemById,
   searchInventoryItems,
-  calculateCostPerServing,
+  resolveIngredientsCost,
   saveRecipe,
   getCurrentRecipe
 };
