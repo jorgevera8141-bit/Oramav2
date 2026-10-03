@@ -167,3 +167,7 @@ main{position:relative;z-index:1}
 .marcar-where .button{min-width:132px}
 .marcar-back{margin-top:var(--space-4)}
 .marcar-tile .badge-estado{white-space:nowrap}
+
+/* The POS keeps its faint ambient glow but does not move it: staff look at these screens for hours and a
+   constantly animated blur costs battery on a tablet. The customer loyalty page keeps the drifting glow. */
+.fx-orb-field--still .fx-orb{animation:none}
