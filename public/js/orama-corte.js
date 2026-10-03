@@ -1,5 +1,5 @@
 async function corte() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessDate();
 
   async function loadCorte(date) {
     const container = document.getElementById('corte-content');

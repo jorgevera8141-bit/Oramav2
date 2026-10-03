@@ -24,7 +24,7 @@ function rangeForPeriod(period) {
   else if (period === '30d') from.setDate(from.getDate() - 29);
   else if (period === '90d') from.setDate(from.getDate() - 89);
   else from.setDate(from.getDate() - 6);
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  return { from: businessDate(from), to: businessDate(to) };
 }
 
 function deltaMarkup(current, previous, formatter) {

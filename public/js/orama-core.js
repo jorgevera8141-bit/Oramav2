@@ -2,6 +2,10 @@ window.Orama = window.Orama || {};
 Orama.routes = Orama.routes || {};
 
 const app = document.getElementById('app');
+// Business days run on Mexico City time. toISOString() is UTC, so "today" flipped to tomorrow around
+// 6 pm and screens such as the corte opened on an empty day.
+const BUSINESS_TZ = 'America/Mexico_City';
+const businessDate = (date = new Date()) => date.toLocaleDateString('en-CA', { timeZone: BUSINESS_TZ });
 const money = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>\'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const loading = '<div class="empty"><svg class="coffee-loader" viewBox="0 0 60 60" aria-label="Cargando"><path class="steam" d="M20 13c-5 5 5 7 0 12"/><path class="steam" d="M30 10c-5 5 5 7 0 12"/><path class="steam" d="M40 13c-5 5 5 7 0 12"/><path class="cup" d="M17 28h27l-3 15c-1 4-5 6-11 6s-10-2-11-6z"/><path class="cup" d="M44 31h5c6 0 6 9 0 10h-6"/><ellipse class="cup" cx="30" cy="49" rx="19" ry="3"/></svg></div>';
