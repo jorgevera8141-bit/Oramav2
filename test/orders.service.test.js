@@ -157,3 +157,32 @@ test('markOrderReady refuses a closed order and reports an unknown one', async (
   await assert.rejects(() => markOrderReady(5, closed), (error) => error.statusCode === 409);
   await assert.rejects(() => markOrderReady(99, fakeClient([])), (error) => error.statusCode === 404);
 });
+
+test('a split payment that does not cover the order total is rejected', () => {
+  rejects({ pagos: [{ payment_method: 'efectivo', amount_cash: 1 }] }, 400);
+  rejects({ pagos: [{ payment_method: 'efectivo', amount_cash: 40 }, { payment_method: 'tarjeta', amount_card: 40 }] }, 400);
+});
+
+test('a split payment that covers the total passes, including tendered cash above it', () => {
+  assert.doesNotThrow(() => assertValidClosePayment(order, { pagos: [{ payment_method: 'efectivo', amount_cash: 50 }, { payment_method: 'tarjeta', amount_card: 50 }] }));
+  assert.doesNotThrow(() => assertValidClosePayment(order, { pagos: [{ payment_method: 'efectivo', amount_cash: 50 }, { payment_method: 'mixto', amount_cash: 40, amount_card: 20 }] }));
+  assert.doesNotThrow(() => assertValidClosePayment(order, { pagos: [{ payment_method: 'efectivo', amount_cash: 99.995 }] }), 'a cent of rounding is tolerated');
+});
+
+test('a split with a comped (cortesia) person is not held to the full total, since that share is free', () => {
+  const authorized = { actor_nombre: 'Ana', actor_pin: '1234' };
+  assert.doesNotThrow(() => assertValidClosePayment(order, { pagos: [{ payment_method: 'efectivo', amount_cash: 30 }, { payment_method: 'cortesia' }], ...authorized }));
+});
+
+test('an efectivo payment cannot carry a card amount, nor a tarjeta payment a cash amount', () => {
+  rejects({ payment_method: 'efectivo', amount_cash: 100, amount_card: 50 }, 400);
+  rejects({ payment_method: 'tarjeta', amount_card: 100, amount_cash: 50 }, 400);
+  rejects({ pagos: [{ payment_method: 'efectivo', amount_cash: 60, amount_card: 40 }] }, 400);
+  rejects({ pagos: [{ payment_method: 'tarjeta', amount_card: 60, amount_cash: 40 }] }, 400);
+});
+
+test('the amounts the cashier screen actually sends still pass', () => {
+  assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'efectivo', amount_cash: 100, amount_card: 0 }));
+  assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'tarjeta', amount_cash: 0, amount_card: 100 }));
+  assert.doesNotThrow(() => assertValidClosePayment(order, { payment_method: 'mixto', amount_cash: 70, amount_card: 30 }));
+});

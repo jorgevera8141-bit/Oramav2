@@ -80,10 +80,32 @@ function requiresCompAuthorization(payload = {}) {
   return Array.isArray(payload.pagos) && payload.pagos.some((pago) => pago.payment_method === 'cortesia');
 }
 
+// An efectivo payment is cash only and a tarjeta payment is card only; the cashier screen
+// never sends a mix, so an amount on the other side means a malformed or tampered call.
+function assertAmountsMatchMethod(method, amountCash, amountCard) {
+  if (method === 'efectivo' && Number(amountCard || 0) > AMOUNT_TOLERANCE) {
+    throw closeError('Un pago en efectivo no puede llevar un monto en tarjeta.');
+  }
+  if (method === 'tarjeta' && Number(amountCash || 0) > AMOUNT_TOLERANCE) {
+    throw closeError('Un pago con tarjeta no puede llevar un monto en efectivo.');
+  }
+}
+
+// A split must add up to the order total. A comped (cortesia) person's share is free and
+// already authorized by a staff PIN, so a split that includes one is not held to the total.
+function assertSplitCoversTotal(order, pagos) {
+  if (pagos.some((pago) => pago.payment_method === 'cortesia')) return;
+  const { amount_cash: cash, amount_card: card } = aggregatePagos(pagos);
+  if (cash + card + AMOUNT_TOLERANCE < Number(order.total)) {
+    throw closeError('Los pagos divididos no cubren el total de la orden.');
+  }
+}
+
 // Rejects closes that would otherwise settle an order without paying, redeeming or being
 // authorized: a loyalty "payment" with no customer/PIN (skipped the redemption entirely),
 // a cortesia with no staff PIN, cliente_frecuente inside a split (nothing is redeemed
-// there), or cash/card amounts that don't cover the total. A close with no method (the
+// there), cash/card amounts that don't cover the total (singly or across a split), or an
+// amount on the wrong side of an efectivo/tarjeta payment. A close with no method (the
 // bar's "listo" button) keeps its existing handling.
 function assertValidClosePayment(order, payload = {}) {
   const method = payload.payment_method;
@@ -96,6 +118,8 @@ function assertValidClosePayment(order, payload = {}) {
     if (payload.pagos.some((pago) => pago.payment_method === 'cliente_frecuente')) {
       throw closeError('El canje de cliente frecuente no se puede dividir. Cierra la orden con el método Frecuente.');
     }
+    payload.pagos.forEach((pago) => assertAmountsMatchMethod(pago.payment_method, pago.amount_cash, pago.amount_card));
+    assertSplitCoversTotal(order, payload.pagos);
     return;
   }
   if (method === 'cliente_frecuente') {
@@ -105,6 +129,7 @@ function assertValidClosePayment(order, payload = {}) {
     return;
   }
   if (CASH_CARD_METHODS.includes(method)) {
+    assertAmountsMatchMethod(method, payload.amount_cash, payload.amount_card);
     const paid = Number(payload.amount_cash || 0) + Number(payload.amount_card || 0);
     if (paid + AMOUNT_TOLERANCE < Number(order.total)) {
       throw closeError('El pago no cubre el total de la orden.');
