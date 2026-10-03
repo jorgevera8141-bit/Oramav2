@@ -28,16 +28,6 @@
 
 ## Design debt (from /design-review, 2026-10-02)
 
-### Dashboard open-orders table clips its action column on phones
-- **What:** On a 375px screen the "Órdenes abiertas" table scrolls sideways and the Efectivo / Tarjeta / Cancelar column is off-screen; the estado pill is cut at the right edge.
-- **Why:** The table keeps `min-width:600px` inside an `overflow-x:auto` wrapper with no cue that it scrolls. Caja handles phones well, so this only hurts the dashboard.
-- **Context:** Make the rows stack as cards under 768px, or drop the actions from the dashboard table and link to Caja.
-
-### Modals have no dialog semantics; the cart summary has no keyboard access
-- **What:** Every modal is `<div class="orama-modal" role="none" aria-modal="true">` (orama-app.js:51, orama-cashier.js:51, 212, 388 and others); it should be `role="dialog"` with `aria-labelledby`. The cart summary (`orama-cart.js:28`, `data-cart-toggle`) is a clickable `div` with no `role="button"`, `tabindex` or `aria-expanded`.
-- **Why:** Screen readers do not announce the PIN and payment dialogs, and the cart cannot be opened from the keyboard. Found by Codex; verified in the source.
-- **Context:** JS changes to live cashier flows, so test the PIN, cobro and split-payment dialogs after.
-
 ### Spacing and type scale tokens
 - **What:** `:root` only defines colour, easing and shadow. Spacing uses ad hoc values (9, 10, 14, 18, 22px) and about 70 raw `rgba(` literals; `var(--mono)` is used but never defined; `.button.small` has no CSS.
 - **Why:** Found by the Claude subagent and Codex. Not user-visible today, but each new screen drifts.
