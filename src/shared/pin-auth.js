@@ -94,4 +94,9 @@ async function upgradePlaintextPins(db = pool) {
   return rows.length;
 }
 
-module.exports = { verifyStaffPin, createPinGuard, upgradePlaintextPins };
+// A manager who sets a new PIN for someone also clears any lock left by earlier wrong tries.
+function clearPinLock(nombre, guard = defaultGuard) {
+  guard.clear(nombre);
+}
+
+module.exports = { verifyStaffPin, createPinGuard, upgradePlaintextPins, clearPinLock };
