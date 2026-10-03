@@ -55,6 +55,7 @@ async function changeStaffPin({ staffId, pin }, actor, db = pool) {
 async function createStaff({ nombre, tipo, pin }, actor, db = pool) {
   const name = typeof nombre === 'string' ? nombre.trim() : '';
   if (name.length < NAME_MIN || name.length > NAME_MAX) throw badRequest(`El nombre debe tener entre ${NAME_MIN} y ${NAME_MAX} caracteres.`);
+  if (/[<>]/.test(name)) throw badRequest('El nombre no puede llevar los signos < o >.');
   if (!TIPOS.includes(tipo)) throw badRequest('El rol debe ser gerente o staff.');
   assertPin(pin);
   const { rows: same } = await db.query('SELECT id FROM staff WHERE LOWER(nombre) = LOWER($1)', [name]);

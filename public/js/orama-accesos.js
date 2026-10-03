@@ -148,7 +148,7 @@ async function accesos() {
   async function onClick(event) {
     const pinButton = event.target.closest('[data-pin-id]');
     if (pinButton) {
-      const pin = await askNewPin(pinButton.dataset.name);
+      const pin = await askNewPin(escapeHtml(pinButton.dataset.name));
       if (!pin) return;
       try { await post(`/api/access/staff/${pinButton.dataset.pinId}/pin`, { pin }); Orama.toast('PIN cambiado', 'success'); }
       catch (error) { Orama.toast(error.message, 'error'); }

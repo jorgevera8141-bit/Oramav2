@@ -111,3 +111,12 @@ test('setStaffActive deactivates and reactivates, but never yourself or the last
   assert.match(JSON.stringify(db.audit.map((a) => a[2])), /desactivar/);
   assert.match(JSON.stringify(db.audit.map((a) => a[2])), /reactivar/);
 });
+
+test('createStaff refuses names that carry markup, so a name can never become script in a screen', async () => {
+  const db = await fakeDb([{ nombre: 'Ana', pin: '1234', tipo: 'management' }]);
+  for (const bad of ['<img src=x onerror=alert(1)>', 'Eva<b>', 'a>b', '"><script>']) {
+    await rejectsWith(access.createStaff({ nombre: bad, tipo: 'staff', pin: '111111' }, manager(db), db), 400);
+  }
+  assert.equal(db.staff.length, 1);
+  await access.createStaff({ nombre: "María José O'Neil", tipo: 'staff', pin: '111111' }, manager(db), db);
+});
