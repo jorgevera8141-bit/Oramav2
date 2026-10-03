@@ -182,8 +182,9 @@ async function reportes() {
           <span>%</span>
           <button type="button" class="button" data-save-threshold>Guardar</button>
         </div>
+        <p class="subtle">El margen se calcula sobre el precio sin IVA (${margenes.iva ? margenes.iva.ivaRate : 16}%), que es lo que realmente gana el negocio, y solo con el costo de los insumos de la receta.</p>
         <div class="export-row"><button type="button" class="pill" data-export="margenes">Exportar CSV</button></div>
-        <div class="table-wrap"><table class="margin-table"><thead><tr><th>Producto</th><th>Precio</th><th>Costo</th><th>Margen</th><th>% Margen</th><th>Vendidos (30d)</th></tr></thead><tbody>
+        <div class="table-wrap"><table class="margin-table"><thead><tr><th>Producto</th><th>Precio</th><th>Costo</th><th>Margen (sin IVA)</th><th>% Margen</th><th>Vendidos (30d)</th></tr></thead><tbody>
           ${margenes.items.length ? margenes.items.map((item) => `<tr><td>${escapeHtml(item.nombre)}</td><td class="mono">${money.format(item.precio)}</td><td class="mono">${money.format(item.costo)}</td><td class="mono">${money.format(item.margen)}</td><td class="mono ${item.bajo_umbral ? 'low-margin' : ''}">${item.margen_pct === null ? '—' : item.margen_pct.toFixed(1) + '%'}${item.bajo_umbral ? '<span class="badge-low">Bajo</span>' : ''}</td><td class="mono">${item.vendidos_30d}</td></tr>`).join('') : '<tr><td colspan="6" class="empty">Sin productos con receta de costo</td></tr>'}
         </tbody></table></div>
       </section>`;
