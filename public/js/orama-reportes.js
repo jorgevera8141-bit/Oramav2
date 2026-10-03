@@ -101,6 +101,7 @@ async function reportes() {
           <p class="kpi-label">Ingresos</p>
           <p class="kpi-value">${money.format(current.ingresos)}</p>
           ${deltaMarkup(current.ingresos, previous.ingresos, (v) => money.format(v))}
+          ${current.cortesias > 0 ? `<div class="kpi-delta flat">Cortesías: ${money.format(current.cortesias)}</div>` : ''}
         </article>
         <article class="glass-card">
           <p class="kpi-label">Órdenes</p>

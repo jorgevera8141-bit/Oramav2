@@ -10,7 +10,9 @@ async function corte() {
       const total = Number(data.total || 0);
       const totalEfectivo = Number(data.total_efectivo || 0);
       const totalTarjeta = Number(data.total_tarjeta || 0);
-      const promedio = ordenes > 0 ? total / ordenes : 0;
+      const cortesias = Number(data.cortesias || 0);
+      const ordenesPagadas = Number(data.ordenes_pagadas ?? ordenes);
+      const promedio = ordenesPagadas > 0 ? total / ordenesPagadas : 0;
       const fechaDisplay = new Date(`${date}T12:00:00`).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
       if (!ordenes) {
@@ -28,6 +30,7 @@ async function corte() {
         <section class="panel">
           <div class="panel-head"><h2>Total del día</h2><span class="subtle">${escapeHtml(fechaDisplay)}</span></div>
           <p class="kpi-value" style="font-size:40px">${money.format(total)}</p>
+          ${cortesias > 0 ? `<p class="subtle">Cortesías y canjes, no incluidos: ${money.format(cortesias)}</p>` : ''}
         </section>
         <section class="panel">
           <div class="panel-head"><h2>Órdenes cerradas</h2><span class="subtle">${ordenes}</span></div>
@@ -42,7 +45,8 @@ async function corte() {
         `Promedio: ${money.format(promedio)}`,
         `Efectivo: ${money.format(totalEfectivo)}`,
         `Tarjeta: ${money.format(totalTarjeta)}`,
-        `TOTAL: ${money.format(total)}`
+        `TOTAL: ${money.format(total)}`,
+        ...(cortesias > 0 ? [`Cortesías y canjes (no incluidos): ${money.format(cortesias)}`] : [])
       ].join('\n');
     } catch (error) {
       container.innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;

@@ -5,6 +5,7 @@ const { validate, numericIdParam } = require('../../middleware/validate');
 const { cerrarSchema, cancelarSchema, crearOrdenSchema } = require('./schemas');
 const { parseDateParam } = require('../../shared/dates');
 const { localDateSql, TODAY_SQL } = require('../../shared/timezone');
+const { compValueSql } = require('../../shared/comps');
 const { priceItems, recordRedemptions } = require('../promotions/service');
 
 const router = express.Router();
@@ -18,8 +19,8 @@ router.get('/ordenes', async (_req, res) => {
 router.get('/ordenes/dia', async (req, res) => {
   const date = parseDateParam(req.query.date);
   const { rows } = date
-    ? await pool.query(`SELECT * FROM ordenes WHERE ${localDateSql('created_at')} = $1 ORDER BY created_at DESC`, [date])
-    : await pool.query(`SELECT * FROM ordenes WHERE ${localDateSql('created_at')} = ${TODAY_SQL} ORDER BY created_at DESC`);
+    ? await pool.query(`SELECT ordenes.*, ${compValueSql('ordenes')} AS comp_value FROM ordenes WHERE ${localDateSql('created_at')} = $1 ORDER BY created_at DESC`, [date])
+    : await pool.query(`SELECT ordenes.*, ${compValueSql('ordenes')} AS comp_value FROM ordenes WHERE ${localDateSql('created_at')} = ${TODAY_SQL} ORDER BY created_at DESC`);
   res.json({ success: true, ordenes: rows });
 });
 

@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../../config/database');
 const { parseDateParam, previousEqualPeriod } = require('../../shared/dates');
 const { localDateSql, localTimestampSql, TODAY_SQL } = require('../../shared/timezone');
+const { compValueSql, salesSql } = require('../../shared/comps');
 
 const router = express.Router();
 
@@ -16,7 +17,9 @@ router.get('/resumen', async (req, res) => {
   const params = date ? [date] : [];
   const { rows: [summary] } = await pool.query(
     `SELECT COUNT(*)::int AS ordenes,
-            COALESCE(SUM(total), 0) AS total,
+            COUNT(*) FILTER (WHERE ${salesSql('ordenes')} > 0)::int AS ordenes_pagadas,
+            COALESCE(SUM(${salesSql('ordenes')}), 0) AS total,
+            COALESCE(SUM(${compValueSql('ordenes')}), 0) AS cortesias,
             COALESCE(SUM(amount_cash), 0) AS total_efectivo,
             COALESCE(SUM(amount_card), 0) AS total_tarjeta
      FROM ordenes
@@ -37,7 +40,11 @@ router.get('/reportes', async (_req, res) => {
 
 async function kpiFor(from, to) {
   const { rows: [orderStats] } = await pool.query(
-    `SELECT COUNT(*)::int AS ordenes, COALESCE(SUM(total),0) AS ingresos FROM ordenes WHERE status = 'cerrada' AND ${localDateSql('closed_at')} BETWEEN $1 AND $2`,
+    `SELECT COUNT(*)::int AS ordenes,
+            COUNT(*) FILTER (WHERE ${salesSql('ordenes')} > 0)::int AS ordenes_pagadas,
+            COALESCE(SUM(${salesSql('ordenes')}),0) AS ingresos,
+            COALESCE(SUM(${compValueSql('ordenes')}),0) AS cortesias
+     FROM ordenes WHERE status = 'cerrada' AND ${localDateSql('closed_at')} BETWEEN $1 AND $2`,
     [from, to]
   );
   const { rows: [gastoStats] } = await pool.query(
@@ -47,7 +54,12 @@ async function kpiFor(from, to) {
   const ingresos = Number(orderStats.ingresos);
   const gastos = Number(gastoStats.gastos);
   const ordenes = orderStats.ordenes;
-  return { ingresos, gastos, neto: ingresos - gastos, ordenes, ticket: ordenes > 0 ? ingresos / ordenes : 0 };
+  const ordenesPagadas = orderStats.ordenes_pagadas;
+  return {
+    ingresos, gastos, neto: ingresos - gastos, ordenes,
+    cortesias: Number(orderStats.cortesias),
+    ticket: ordenesPagadas > 0 ? ingresos / ordenesPagadas : 0
+  };
 }
 
 router.get('/reportes/v2', async (req, res) => {
@@ -60,7 +72,7 @@ router.get('/reportes/v2', async (req, res) => {
   const previous = await kpiFor(prev.from, prev.to);
 
   const { rows: serie } = await pool.query(
-    `SELECT ${localDateSql('closed_at')} AS d, COALESCE(SUM(total),0) AS ingresos, COUNT(*)::int AS ordenes
+    `SELECT ${localDateSql('closed_at')} AS d, COALESCE(SUM(${salesSql('ordenes')}),0) AS ingresos, COUNT(*)::int AS ordenes
      FROM ordenes WHERE status = 'cerrada' AND ${localDateSql('closed_at')} BETWEEN $1 AND $2 GROUP BY 1 ORDER BY 1`,
     [from, to]
   );
@@ -78,6 +90,7 @@ router.get('/reportes/v2', async (req, res) => {
      JOIN ordenes o ON o.id = oi.orden_id
      JOIN menu_items mi ON mi.id = ${LINE_MENU_ITEM_SQL}
      WHERE o.status = 'cerrada' AND ${localDateSql('o.closed_at')} BETWEEN $1 AND $2
+       AND COALESCE(o.payment_method, '') NOT IN ('cortesia', 'cliente_frecuente')
      GROUP BY mi.categoria ORDER BY total DESC`,
     [from, to]
   );
@@ -86,6 +99,7 @@ router.get('/reportes/v2', async (req, res) => {
     `SELECT oi.item_nombre, SUM(oi.cantidad)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio),0) AS ingreso
      FROM orden_items oi JOIN ordenes o ON o.id = oi.orden_id
      WHERE o.status = 'cerrada' AND ${localDateSql('o.closed_at')} BETWEEN $1 AND $2
+       AND COALESCE(o.payment_method, '') NOT IN ('cortesia', 'cliente_frecuente')
      GROUP BY oi.item_nombre ORDER BY cantidad DESC LIMIT 8`,
     [from, to]
   );
@@ -94,6 +108,7 @@ router.get('/reportes/v2', async (req, res) => {
     `SELECT oi.item_nombre, SUM(oi.cantidad)::int AS cantidad, COALESCE(SUM(oi.cantidad * oi.precio),0) AS ingreso
      FROM orden_items oi JOIN ordenes o ON o.id = oi.orden_id
      WHERE o.status = 'cerrada' AND ${localDateSql('o.closed_at')} BETWEEN $1 AND $2
+       AND COALESCE(o.payment_method, '') NOT IN ('cortesia', 'cliente_frecuente')
      GROUP BY oi.item_nombre ORDER BY ingreso DESC LIMIT 8`,
     [from, to]
   );
@@ -111,13 +126,13 @@ router.get('/reportes/horas', async (req, res) => {
   const to = parseDateParam(req.query.to);
   const { rows } = from && to
     ? await pool.query(
-        `SELECT EXTRACT(DOW FROM ${localTimestampSql('created_at')})::int AS dow, EXTRACT(HOUR FROM ${localTimestampSql('created_at')})::int AS hora, COUNT(*)::int AS ordenes, COALESCE(SUM(total),0) AS ingresos
-         FROM ordenes WHERE ${localDateSql('created_at')} BETWEEN $1 AND $2 GROUP BY 1, 2 ORDER BY 1, 2`,
+        `SELECT EXTRACT(DOW FROM ${localTimestampSql('created_at')})::int AS dow, EXTRACT(HOUR FROM ${localTimestampSql('created_at')})::int AS hora, COUNT(*)::int AS ordenes, COALESCE(SUM(${salesSql('ordenes')}),0) AS ingresos
+         FROM ordenes WHERE status = 'cerrada' AND ${localDateSql('created_at')} BETWEEN $1 AND $2 GROUP BY 1, 2 ORDER BY 1, 2`,
         [from, to]
       )
     : await pool.query(
-        `SELECT EXTRACT(DOW FROM ${localTimestampSql('created_at')})::int AS dow, EXTRACT(HOUR FROM ${localTimestampSql('created_at')})::int AS hora, COUNT(*)::int AS ordenes, COALESCE(SUM(total),0) AS ingresos
-         FROM ordenes GROUP BY 1, 2 ORDER BY 1, 2`
+        `SELECT EXTRACT(DOW FROM ${localTimestampSql('created_at')})::int AS dow, EXTRACT(HOUR FROM ${localTimestampSql('created_at')})::int AS hora, COUNT(*)::int AS ordenes, COALESCE(SUM(${salesSql('ordenes')}),0) AS ingresos
+         FROM ordenes WHERE status = 'cerrada' GROUP BY 1, 2 ORDER BY 1, 2`
       );
   res.json({ success: true, celdas: rows });
 });
@@ -187,8 +202,8 @@ router.get('/reportes/mesas', async (req, res) => {
   const { rows } = await pool.query(
     `SELECT o.mesa_nombre,
             COUNT(*)::int AS ordenes,
-            COALESCE(SUM(o.total),0) AS ingresos,
-            COALESCE(AVG(o.total),0) AS ticket,
+            COALESCE(SUM(${salesSql('o')}),0) AS ingresos,
+            COALESCE(AVG(${salesSql('o')}) FILTER (WHERE ${salesSql('o')} > 0),0) AS ticket,
             AVG(EXTRACT(EPOCH FROM (o.closed_at - o.created_at)) / 60) FILTER (WHERE o.closed_at IS NOT NULL) AS min_prom
      FROM ordenes o
      WHERE o.status = 'cerrada' AND ${localDateSql('o.closed_at')} BETWEEN $1 AND $2 AND o.mesa_nombre IS NOT NULL
@@ -205,7 +220,7 @@ router.get('/finanzas', async (req, res) => {
   if (!from || !to) throw Object.assign(new Error('from y to son requeridos (YYYY-MM-DD)'), { statusCode: 400 });
 
   const { rows: ingresosPorMes } = await pool.query(
-    `SELECT to_char(date_trunc('month', ${localTimestampSql('closed_at')}), 'YYYY-MM') AS mes, COALESCE(SUM(total),0) AS ingresos
+    `SELECT to_char(date_trunc('month', ${localTimestampSql('closed_at')}), 'YYYY-MM') AS mes, COALESCE(SUM(${salesSql('ordenes')}),0) AS ingresos
      FROM ordenes WHERE status = 'cerrada' AND ${localDateSql('closed_at')} BETWEEN $1 AND $2
      GROUP BY 1 ORDER BY 1`,
     [from, to]
