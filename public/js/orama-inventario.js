@@ -37,7 +37,7 @@ function inventarioTable(items) {
         `<button type="button" class="button" data-edit-item="${item.id}" aria-label="Editar ${escapeHtml(item.name)}">Editar</button>` +
         `<button type="button" class="button danger" data-delete-item="${item.id}" aria-label="Eliminar ${escapeHtml(item.name)}">Eliminar</button>` +
         `</div></td></tr>`;
-    }).join('') : '<tr><td colspan="6" class="empty">Sin inventario</td></tr>'
+    }).join('') : '<tr><td colspan="6" class="empty">Aún no hay insumos. Agrega el primero con el formulario de arriba.</td></tr>'
   }</tbody></table></div>`;
 }
 
