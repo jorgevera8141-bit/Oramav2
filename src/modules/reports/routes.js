@@ -4,6 +4,7 @@ const { parseDateParam, previousEqualPeriod } = require('../../shared/dates');
 const { localDateSql, localTimestampSql, TODAY_SQL } = require('../../shared/timezone');
 const { compValueSql, salesSql, paidFractionSql } = require('../../shared/comps');
 const { getTaxSettings } = require('../../shared/tax');
+const { getBusinessSettings } = require('../../shared/business');
 const { marginOnMenuPrice } = require('../pricing/calculator');
 
 const router = express.Router();
@@ -142,7 +143,8 @@ router.get('/reportes/horas', async (req, res) => {
 router.get('/reportes/margenes', async (_req, res) => {
   const { rows: items } = await pool.query(`
     SELECT mi.id, mi.nombre, mi.categoria, mi.precio,
-           recipe_cost.costo,
+           recipe_cost.costo AS costo_insumos,
+           COALESCE(extras.packaging + extras.labor + extras.other, 0) AS costo_extras,
            COALESCE(sold.vendidos_30d, 0)::int AS vendidos_30d
     FROM menu_items mi
     LEFT JOIN (
@@ -150,6 +152,7 @@ router.get('/reportes/margenes', async (_req, res) => {
       FROM recipe_items ri JOIN inventory_items ii ON ii.id = ri.inventory_item_id
       GROUP BY ri.menu_item_id
     ) recipe_cost ON recipe_cost.menu_item_id = mi.id
+    LEFT JOIN menu_item_costs extras ON extras.menu_item_id = mi.id
     LEFT JOIN (
       SELECT ${LINE_MENU_ITEM_SQL} AS menu_item_id, SUM(oi.cantidad) AS vendidos_30d
       FROM orden_items oi JOIN ordenes o ON o.id = oi.orden_id
@@ -161,7 +164,7 @@ router.get('/reportes/margenes', async (_req, res) => {
 
   const { rows: [settingRow] } = await pool.query("SELECT value FROM orama_settings WHERE key = 'margin_threshold_pct'");
   const thresholdPct = Number(settingRow?.value || 70);
-  const tax = await getTaxSettings(pool);
+  const [tax, business] = await Promise.all([getTaxSettings(pool), getBusinessSettings(pool)]);
 
   const { rows: [coverage] } = await pool.query(`
     SELECT COUNT(*)::int AS total,
@@ -171,12 +174,13 @@ router.get('/reportes/margenes', async (_req, res) => {
   const { rows: [insumos] } = await pool.query('SELECT COUNT(*)::int AS count FROM inventory_items WHERE cost_per_unit > 0');
 
   const withMargin = items
-    .filter((item) => item.costo !== null)
+    .filter((item) => item.costo_insumos !== null)
     .map((item) => {
       const precio = Number(item.precio);
-      const costo = Number(item.costo);
-      // Margin on the price without IVA, which is what the café earns (menu prices include IVA).
-      const { netPrice, margin: margen, marginPct: margenPct } = marginOnMenuPrice(precio, costo, tax);
+      // The same cost and margin the calculator shows: ingredients plus packaging/labour/other, with the card
+      // fee and the free drinks taken out of the price, on the price without IVA (menu prices include IVA).
+      const costo = Number(item.costo_insumos) + Number(item.costo_extras);
+      const { netPrice, margin: margen, marginPct: margenPct } = marginOnMenuPrice(precio, costo, tax, business);
       return {
         id: item.id,
         nombre: item.nombre,
@@ -184,6 +188,8 @@ router.get('/reportes/margenes', async (_req, res) => {
         precio,
         precio_neto: netPrice,
         costo,
+        costo_insumos: Number(item.costo_insumos),
+        costo_extras: Number(item.costo_extras),
         margen,
         margen_pct: margenPct,
         vendidos_30d: item.vendidos_30d,
