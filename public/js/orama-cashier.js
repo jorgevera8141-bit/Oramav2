@@ -48,7 +48,7 @@ async function cashier() {
       if (!keepCurrent) closeAnyModal();
       const overlay = document.createElement('div');
       overlay.className = 'orama-overlay';
-      overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
+      overlay.innerHTML = `<div class="orama-modal" role="dialog" aria-modal="true">
         <p class="orama-modal-message">${escapeHtml(title)}</p>
         <div class="field-group"><label for="pin-actor-nombre">Tu nombre</label>
           <select class="search" id="pin-actor-nombre">${staffList.map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
@@ -209,7 +209,7 @@ async function cashier() {
     closeAnyModal();
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = '<div class="orama-modal" id="factura-body" role="none" aria-modal="true"></div>';
+    overlay.innerHTML = '<div class="orama-modal" id="factura-body" role="dialog" aria-modal="true" aria-label="Facturar venta"></div>';
     document.body.appendChild(overlay);
     currentOverlay = overlay;
     const body = overlay.querySelector('#factura-body');
@@ -385,7 +385,7 @@ async function cashier() {
     let loyalty = null;
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
+    overlay.innerHTML = `<div class="orama-modal" role="dialog" aria-modal="true" aria-label="Cobrar orden">
         <p class="subtle" style="margin:0 0 4px">${escapeHtml(order.mesa_nombre || 'Mostrador')}</p>
         <p class="orama-modal-message" style="font:700 28px 'JetBrains Mono',monospace;color:var(--cream)">${money.format(order.total)}</p>
         <div class="field-group">
@@ -467,7 +467,7 @@ async function cashier() {
     closeAnyModal();
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = '<div class="orama-modal split-view" id="split-body" role="none" aria-modal="true"></div>';
+    overlay.innerHTML = '<div class="orama-modal split-view" id="split-body" role="dialog" aria-modal="true" aria-label="Dividir cuenta"></div>';
     document.body.appendChild(overlay);
     currentOverlay = overlay;
     const body = overlay.querySelector('#split-body');

@@ -48,7 +48,7 @@ async function promptForStaffPin({ title, subtitle }) {
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
     overlay.innerHTML = `
-      <div class="orama-modal" role="none" aria-modal="true">
+      <div class="orama-modal" role="dialog" aria-modal="true">
         <p class="orama-modal-message">${escapeHtml(title)}<br><span class="subtle">${escapeHtml(subtitle)}</span></p>
         <form id="staff-pin-form">
           <div class="field-group">
