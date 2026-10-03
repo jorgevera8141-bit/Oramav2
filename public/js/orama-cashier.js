@@ -79,15 +79,23 @@ async function cashier() {
     try {
       const data = await api('/api/ordenes');
       activasCache = (data.ordenes || []).filter((order) => order.status === 'abierta');
-      container.innerHTML = activasCache.length ? activasCache.map((order) => `<article class="order-card">
-          <div class="order-card-head"><h2 class="order-card-mesa">${escapeHtml(order.mesa_nombre || 'Mostrador')}</h2><span class="mono">${money.format(Number(order.total || 0))}</span></div>
-          <p class="subtle" style="margin:0 0 12px">${new Date(order.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p>
-          <div class="action-row">
-            <button type="button" class="button" data-pay-id="${order.id}" aria-label="Cobrar orden de ${escapeHtml(order.mesa_nombre || 'Mostrador')}">Cobrar</button>
-            <button type="button" class="button" data-split-id="${order.id}" aria-label="Dividir cuenta de ${escapeHtml(order.mesa_nombre || 'Mostrador')}">Dividir</button>
-            <button type="button" class="button danger" data-cancel-id="${order.id}" aria-label="Cancelar orden de ${escapeHtml(order.mesa_nombre || 'Mostrador')}">Cancelar</button>
+      // The cashier sees what is being charged for, so a wrong order is caught before the card is swiped.
+      const itemLists = await Promise.all(activasCache.map((order) => api(`/api/ordenes/${order.id}/items`).then((result) => result.items || []).catch(() => [])));
+      container.innerHTML = activasCache.length ? activasCache.map((order, index) => {
+        const name = escapeHtml(order.mesa_nombre || 'Mostrador');
+        const items = itemLists[index];
+        const wait = minutesSince(order.created_at);
+        return `<article class="order-card ${wait >= 10 ? 'urgent' : ''}">
+          <div class="order-card-head"><h2 class="order-card-mesa">${name}</h2><span class="order-card-total mono">${money.format(Number(order.total || 0))}</span></div>
+          <p class="order-card-meta">${new Date(order.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} · ${waitLabel(wait)}</p>
+          <ul class="order-card-items">${items.length ? items.map((item) => `<li><span class="order-card-qty">x${item.cantidad}</span><span>${escapeHtml(item.item_nombre)}</span></li>`).join('') : '<li>Sin artículos</li>'}</ul>
+          <div class="order-card-actions">
+            <button type="button" class="button primary" data-pay-id="${order.id}" aria-label="Cobrar orden de ${name}">Cobrar</button>
+            <button type="button" class="button" data-split-id="${order.id}" aria-label="Dividir cuenta de ${name}">Dividir</button>
           </div>
-        </article>`).join('') : '<div class="empty">No hay órdenes activas</div>';
+          <button type="button" class="button danger order-card-cancel" data-cancel-id="${order.id}" aria-label="Cancelar orden de ${name}">Cancelar orden</button>
+        </article>`;
+      }).join('') : '<div class="empty">No hay órdenes activas</div>';
     } catch (error) {
       container.innerHTML = `<div class="error" role="alert">${escapeHtml(error.message)}</div>`;
     }
