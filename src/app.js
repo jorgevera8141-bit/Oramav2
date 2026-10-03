@@ -17,6 +17,7 @@ const uploadsRoutes = require('./modules/uploads/routes');
 const loyaltyRoutes = require('./modules/loyalty/routes');
 const pricingRoutes = require('./modules/pricing/routes');
 const { createGate } = require('./middleware/gate');
+const { upgradePlaintextPins } = require('./shared/pin-auth');
 
 const app = express();
 
@@ -302,6 +303,9 @@ async function initDb() {
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_sessions_open_staff ON staff_sessions(staff_id) WHERE logout_time IS NULL');
   await pool.query(`CREATE OR REPLACE FUNCTION mx(ts timestamp) RETURNS timestamp AS $$ SELECT ts AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City' $$ LANGUAGE sql STABLE;`);
   await pool.query(`INSERT INTO orama_settings (key, value) VALUES ('margin_threshold_pct', '70') ON CONFLICT DO NOTHING`);
+  // PINs used to be stored as plain text; hash any that still are (a no-op once they all are).
+  const hashed = await upgradePlaintextPins(pool);
+  if (hashed) console.log(`Hashed ${hashed} plaintext staff PIN(s)`);
 }
 
 async function start() {

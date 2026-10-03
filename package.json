@@ -7,6 +7,7 @@
 	"scripts": {
 		"start": "node src/app.js",
 		"seed": "node src/seeds/seed-menu.pg.js",
+		"set-pin": "node scripts/set-pin.js",
 		"test": "node --test"
 	},
 	"engines": {
