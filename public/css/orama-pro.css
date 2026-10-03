@@ -126,3 +126,18 @@ main{position:relative;z-index:1}
 
 /* A page action (e.g. "Nueva orden") drops below the title on small phones instead of squeezing it. */
 @media(max-width:480px){.page-head{flex-wrap:wrap;align-items:flex-start}.page-head .button{width:100%}}
+
+/* Order tables become one card per order on phones, so the action buttons are never scrolled out of view. */
+@media(max-width:767px){
+  .stack-table,.stack-table tbody,.stack-table tr,.stack-table td{display:block}
+  .stack-table{min-width:0}
+  .stack-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .stack-table tr{padding:10px 0;border-bottom:1px solid rgba(61,43,31,.3)}
+  .stack-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border:0}
+  .stack-table td::before{content:attr(data-label);color:var(--muted);font:600 12px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase}
+  .stack-table td[data-label="Acciones"]{display:block;padding-top:10px}
+  .stack-table td[data-label="Acciones"]::before{content:none}
+  .stack-table td.empty{display:block}
+  .stack-table td.empty::before{content:none}
+  .stack-table .action-row .button{flex:1;padding-inline:8px}
+}
