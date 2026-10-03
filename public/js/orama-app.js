@@ -495,9 +495,14 @@ async function nomina() {
     // Verify staff is management
     const staffData = await api('/api/staff/active');
     const staffMember = staffData.staff.find(s => s.nombre === nombre && s.activo);
-    if (!staffMember || staffMember.tipo !== 'management') {
-      Orama.toast('Acceso denegado: solo gerentes', 'error');
+    if (!staffMember) {
+      Orama.toast('Acceso denegado', 'error');
       return;
+    }
+    if (staffMember.tipo !== 'management') {
+      // Staff see only their own Marcación here (their PIN is checked by the clock endpoints).
+      app.innerHTML = pageHead('Nómina', 'Gestión de tiempo y pagos', 'Tu marcación de entrada y salida', '/images/cafe-ambiance.jpg') + '<section class="panel" id="nomina-self"></section>';
+      return await marcarSelfCard(document.getElementById('nomina-self'), { nombre, pin });
     }
 
     // Load nomina interface

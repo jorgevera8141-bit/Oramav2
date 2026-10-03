@@ -43,3 +43,16 @@ test('cleanup manager ignores a non-function passed to set', () => {
   manager.set('not a function');
   assert.doesNotThrow(() => manager.run());
 });
+
+const { landingRoute } = require('../public/js/orama-router.js');
+
+test('landingRoute sends a device to Marcar the first time it is opened each business day', () => {
+  assert.equal(landingRoute('', null, '2026-10-03'), '#marcar');
+  assert.equal(landingRoute('#', '2026-10-02', '2026-10-03'), '#marcar', 'last seen yesterday');
+});
+
+test('landingRoute leaves the device alone once it has seen Marcar today, or when a page was asked for', () => {
+  assert.equal(landingRoute('', '2026-10-03', '2026-10-03'), null);
+  assert.equal(landingRoute('#caja', null, '2026-10-03'), null, 'a bookmarked page is never overridden');
+  assert.equal(landingRoute('#marcar', null, '2026-10-03'), null);
+});
