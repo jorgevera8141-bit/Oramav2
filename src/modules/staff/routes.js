@@ -4,6 +4,7 @@ const { verifyStaffPin } = require('../../shared/pin-auth');
 const { validate } = require('../../middleware/validate');
 const { clockPayloadSchema, timeClockEditSchema } = require('./schemas');
 const staffService = require('./service');
+const { startShift, endShift } = require('../marcacion/service');
 const { localDateSql, TODAY_SQL, localDateString } = require('../../shared/timezone');
 
 const router = express.Router();
@@ -80,28 +81,18 @@ router.post('/staff/time-clock/clock-in', verifyAdmin, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Staff member is not active' });
   }
 
-  // Check if already clocked in (without clock out)
-  const { rows: existingClockIn } = await pool.query(
-    'SELECT id FROM time_clock WHERE staff_id = $1 AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1',
-    [staff_id]
-  );
-
-  if (existingClockIn.length > 0) {
+  // Same shared function as the Marcar screen and the Staff page, so payroll and the live list agree.
+  const shift = await startShift(staff_id, pool, new Date(), { screen: 'nomina' });
+  if (shift.ya_estaba) {
     return res.status(400).json({
       success: false,
       error: 'Staff member is already clocked in. Please clock out first.'
     });
   }
 
-  // Clock in
-  const { rows } = await pool.query(
-    'INSERT INTO time_clock (staff_id, clock_in) VALUES ($1, CURRENT_TIMESTAMP) RETURNING *',
-    [staff_id]
-  );
-
   res.status(201).json({
     success: true,
-    timeClock: rows[0],
+    timeClock: shift.turno,
     message: 'Successfully clocked in'
   });
 });
@@ -112,25 +103,11 @@ router.post('/staff/time-clock/clock-out', verifyAdmin, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Staff ID is required' });
   }
 
-  // Find the most recent clock-in without clock-out
-  const { rows: clockInRows } = await pool.query(
-    'SELECT id, clock_in FROM time_clock WHERE staff_id = $1 AND clock_out IS NULL ORDER BY clock_in DESC LIMIT 1',
-    [staff_id]
-  );
-
-  if (clockInRows.length === 0) {
-    return res.status(400).json({ success: false, error: 'Staff member is not currently clocked in' });
-  }
-
-  // Clock out
-  const { rows } = await pool.query(
-    'UPDATE time_clock SET clock_out = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
-    [clockInRows[0].id]
-  );
+  const shift = await endShift(staff_id, pool);
 
   res.json({
     success: true,
-    timeClock: rows[0],
+    timeClock: shift.turno,
     message: 'Successfully clocked out'
   });
 });

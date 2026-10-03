@@ -16,6 +16,13 @@ function createCleanupManager() {
   };
 }
 
+// The first time a device is opened each business day it lands on Marcar (clock in / continue your
+// shift); after that, and whenever a specific page was asked for, it opens where it was told to.
+function landingRoute(hash, lastMarcarDay, today) {
+  const noPageAsked = !hash || hash === '#';
+  return noPageAsked && lastMarcarDay !== today ? '#marcar' : null;
+}
+
 if (typeof window !== 'undefined') {
   const routeCleanup = createCleanupManager();
   window.render = async function render() {
@@ -35,9 +42,13 @@ if (typeof window !== 'undefined') {
     }
   };
   window.addEventListener('hashchange', window.render);
+  let lastMarcarDay = null;
+  try { lastMarcarDay = localStorage.getItem('orama.marcarDay'); } catch { /* storage blocked: treat as never seen */ }
+  const landing = landingRoute(location.hash, lastMarcarDay, businessDate());
+  if (landing) history.replaceState(null, '', landing);
   window.render();
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { resolveRoute, createCleanupManager };
+  module.exports = { resolveRoute, createCleanupManager, landingRoute };
 }
