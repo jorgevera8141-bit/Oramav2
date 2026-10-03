@@ -1,5 +1,6 @@
 const pool = require('../../config/database');
 const { verifyStaffPin } = require('../../shared/pin-auth');
+const { startShift, endShift } = require('../marcacion/service');
 const { localTimestampSql, localDateString, zonedDateTimeToUtc } = require('../../shared/timezone');
 
 function staffError(message, statusCode) {
@@ -97,9 +98,12 @@ function summarizeSessionRows(rows, range, now = new Date()) {
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
+// Clocking is shared with the Marcar screen and Nómina (see marcacion/service.js) so payroll's
+// time_clock and this live session list stay in step. Someone already on shift is recognised.
 async function clockIn(data, db = pool, now = new Date()) {
   const staff = await verifyStaffPin(data.nombre, data.pin, null, db);
-  const { rows: activeRows } = await db.query(
+  const shift = await startShift(staff.id, db, now, { screen: data.screen || 'pos' });
+  const { rows } = await db.query(
     `SELECT id, staff_id, screen, login_time, logout_time
      FROM staff_sessions
      WHERE staff_id = $1 AND logout_time IS NULL
@@ -107,45 +111,13 @@ async function clockIn(data, db = pool, now = new Date()) {
      LIMIT 1`,
     [staff.id]
   );
-  if (activeRows[0]) {
-    throw staffError('Este miembro del staff ya tiene una sesión activa.', 409);
-  }
-  try {
-    const { rows } = await db.query(
-      `INSERT INTO staff_sessions (staff_id, screen)
-       VALUES ($1, COALESCE($2, 'pos'))
-       RETURNING id, staff_id, screen, login_time, logout_time`,
-      [staff.id, data.screen || null]
-    );
-    return { staff, session: serializeSession(rows[0], now) };
-  } catch (error) {
-    if (error?.code === '23505' && error?.constraint === 'idx_staff_sessions_open_staff') {
-      throw staffError('Este miembro del staff ya tiene una sesión activa.', 409);
-    }
-    throw error;
-  }
+  return { staff, session: serializeSession(rows[0], now), ya_estaba: shift.ya_estaba };
 }
 
 async function clockOut(data, db = pool, now = new Date()) {
   const staff = await verifyStaffPin(data.nombre, data.pin, null, db);
-  const { rows } = await db.query(
-    `UPDATE staff_sessions
-     SET logout_time = CURRENT_TIMESTAMP
-     WHERE id = (
-       SELECT id
-       FROM staff_sessions
-       WHERE staff_id = $1 AND logout_time IS NULL
-       ORDER BY login_time DESC
-       LIMIT 1
-     )
-       AND logout_time IS NULL
-     RETURNING id, staff_id, screen, login_time, logout_time`,
-    [staff.id]
-  );
-  if (!rows[0]) {
-    throw staffError('No hay una sesión activa para cerrar.', 409);
-  }
-  return { staff, session: serializeSession(rows[0], now) };
+  const result = await endShift(staff.id, db, now);
+  return { staff, session: result.sesion ? serializeSession(result.sesion, now) : null };
 }
 
 async function listClockedInStaff(db = pool, now = new Date()) {

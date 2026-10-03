@@ -16,6 +16,7 @@ const socialPostsRoutes = require('./modules/social-posts/routes');
 const uploadsRoutes = require('./modules/uploads/routes');
 const loyaltyRoutes = require('./modules/loyalty/routes');
 const pricingRoutes = require('./modules/pricing/routes');
+const marcacionRoutes = require('./modules/marcacion/routes');
 const { createGate } = require('./middleware/gate');
 const { upgradePlaintextPins } = require('./shared/pin-auth');
 
@@ -49,6 +50,7 @@ app.use('/api', socialPostsRoutes);
 app.use('/api', uploadsRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api', loyaltyRoutes);
+app.use('/api', marcacionRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
