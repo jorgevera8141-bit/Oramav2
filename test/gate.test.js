@@ -145,3 +145,52 @@ test('requests with no credentials are challenged but never counted as failed at
   for (let i = 0; i < 3; i += 1) assert.equal(run(basic('wrong')).res.code, 401);
   assert.equal(run(basic('wrong')).res.code, 429, 'wrong passcodes are still throttled');
 });
+
+// ---- passcode saved from the POS (checked through a store) instead of the Railway variable ----
+const { createGateStore } = require('../src/shared/gate-store');
+
+function runGate(gate, header, ip = '3.3.3.3') {
+  const res = { code: null, headers: {}, set(k, v) { this.headers[k] = v; return this; }, status(c) { this.code = c; return this; }, json() { return this; }, send() { return this; } };
+  let nexted = false;
+  const out = gate({ method: 'GET', path: '/x', originalUrl: '/x', ip, headers: header === undefined ? {} : { authorization: header } }, res, () => { nexted = true; });
+  return Promise.resolve(out).then(() => ({ res, nexted }));
+}
+async function storeWith(passcode) {
+  const store = createGateStore();
+  const db = { async query() { return { rows: [] }; } };
+  await store.set(db, passcode, 'Ana');
+  return store;
+}
+
+test('a passcode saved in the POS replaces the Railway one', async () => {
+  const gate = createGate({ passcode: 'railway-code', store: await storeWith('pos-code') });
+  assert.equal((await runGate(gate, basic('pos-code'))).nexted, true);
+  assert.equal((await runGate(gate, basic('railway-code'))).res.code, 401, 'the old Railway value no longer opens the gate');
+  assert.equal((await runGate(gate, undefined)).res.code, 401);
+});
+
+test('GATE_FORCE_ENV brings the Railway passcode back as the break-glass recovery', async () => {
+  const gate = createGate({ passcode: 'railway-code', store: await storeWith('pos-code'), forceEnv: true });
+  assert.equal((await runGate(gate, basic('railway-code'))).nexted, true);
+  assert.equal((await runGate(gate, basic('pos-code'))).res.code, 401);
+});
+
+test('with no passcode saved in the POS the Railway one still works', async () => {
+  const store = createGateStore();
+  const gate = createGate({ passcode: 'railway-code', store });
+  assert.equal((await runGate(gate, basic('railway-code'))).nexted, true);
+});
+
+test('wrong passcodes against a POS passcode are throttled like the Railway one', async () => {
+  const gate = createGate({ passcode: 'railway-code', store: await storeWith('pos-code'), maxFailures: 3, windowMs: 1000 });
+  for (let i = 0; i < 3; i += 1) assert.equal((await runGate(gate, basic('bad'), '4.4.4.4')).res.code, 401);
+  assert.equal((await runGate(gate, basic('bad'), '4.4.4.4')).res.code, 429);
+  assert.equal((await runGate(gate, basic('pos-code'), '4.4.4.4')).res.code, 429, 'locked until the window ends');
+  assert.equal((await runGate(gate, basic('pos-code'), '5.5.5.5')).nexted, true, 'another address is unaffected');
+});
+
+test('credential-less requests are never counted against a POS passcode either', async () => {
+  const gate = createGate({ passcode: 'railway-code', store: await storeWith('pos-code'), maxFailures: 3, windowMs: 1000 });
+  for (let i = 0; i < 20; i += 1) assert.equal((await runGate(gate, undefined, '6.6.6.6')).res.code, 401);
+  assert.equal((await runGate(gate, basic('pos-code'), '6.6.6.6')).nexted, true);
+});

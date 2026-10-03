@@ -17,6 +17,8 @@ const uploadsRoutes = require('./modules/uploads/routes');
 const loyaltyRoutes = require('./modules/loyalty/routes');
 const pricingRoutes = require('./modules/pricing/routes');
 const { createGate } = require('./middleware/gate');
+const { gateStore } = require('./shared/gate-store');
+const accessRoutes = require('./modules/access/routes');
 const { upgradePlaintextPins } = require('./shared/pin-auth');
 
 const app = express();
@@ -28,6 +30,8 @@ app.set('trust proxy', 1);
 app.use(createGate({
   passcode: process.env.GATE_PASSCODE,
   previous: process.env.GATE_PASSCODE_PREVIOUS,
+  store: gateStore,
+  forceEnv: process.env.GATE_FORCE_ENV === '1',
   isProduction: process.env.NODE_ENV === 'production'
 }));
 app.use(express.json({ limit: '2mb' }));
@@ -49,6 +53,7 @@ app.use('/api', socialPostsRoutes);
 app.use('/api', uploadsRoutes);
 app.use('/api/pricing', pricingRoutes);
 app.use('/api', loyaltyRoutes);
+app.use('/api', accessRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
@@ -303,6 +308,14 @@ async function initDb() {
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_sessions_open_staff ON staff_sessions(staff_id) WHERE logout_time IS NULL');
   await pool.query(`CREATE OR REPLACE FUNCTION mx(ts timestamp) RETURNS timestamp AS $$ SELECT ts AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City' $$ LANGUAGE sql STABLE;`);
   await pool.query(`INSERT INTO orama_settings (key, value) VALUES ('margin_threshold_pct', '70') ON CONFLICT DO NOTHING`);
+  // The café passcode saved from the POS lives in its own table, not in orama_settings (whose GET returns every row).
+  await pool.query(`CREATE TABLE IF NOT EXISTS gate_access (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    passcode_hash TEXT NOT NULL,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    changed_by TEXT
+  )`);
+  await gateStore.load(pool);
   // PINs used to be stored as plain text; hash any that still are (a no-op once they all are).
   const hashed = await upgradePlaintextPins(pool);
   if (hashed) console.log(`Hashed ${hashed} plaintext staff PIN(s)`);
