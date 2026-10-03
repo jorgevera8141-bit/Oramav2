@@ -4,6 +4,7 @@ const { verifyStaffPin } = require('../../shared/pin-auth');
 const { validate } = require('../../middleware/validate');
 const { clockPayloadSchema, timeClockEditSchema } = require('./schemas');
 const staffService = require('./service');
+const { requireManager, managerIfPresent } = require('../../middleware/require-manager');
 const { startShift, endShift } = require('../marcacion/service');
 const { localDateSql, TODAY_SQL, localDateString } = require('../../shared/timezone');
 
@@ -22,10 +23,13 @@ const verifyAdmin = async (req, res, next) => {
 };
 
 // GET all staff (for frontend staff management interfaces)
-router.get('/staff', async (_req, res) => {
+// Names are public inside the café code; pay rates are shown only to a verified manager (name and PIN
+// in the X-Actor-Nombre / X-Actor-Pin headers). Wrong credentials are a 401, never a silent downgrade.
+router.get('/staff', async (req, res) => {
+  const manager = await managerIfPresent(req);
   try {
     const { rows } = await pool.query('SELECT id, nombre, tipo, idioma, activo, hourly_rate, created_at FROM staff ORDER BY id ASC');
-    const staff = rows.map((row) => ({ ...row, hourly_rate: parseFloat(row.hourly_rate) || 0 }));
+    const staff = rows.map(({ hourly_rate: rate, ...row }) => (manager ? { ...row, hourly_rate: parseFloat(rate) || 0 } : row));
     res.json({ success: true, staff });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -188,7 +192,7 @@ router.post('/staff/time-clock/break-end', verifyAdmin, async (req, res) => {
 
 // List recent time_clock entries across all staff, for manual correction
 // (someone forgot to clock out, wrong time, double-clicked, etc.)
-router.get('/staff/time-clock/recent', async (_req, res) => {
+router.get('/staff/time-clock/recent', requireManager, async (_req, res) => {
   const { rows } = await pool.query(
     `SELECT tc.id, tc.staff_id, s.nombre, tc.clock_in, tc.clock_out, tc.total_break_minutes
      FROM time_clock tc
@@ -369,7 +373,7 @@ router.get('/staff/time-clock/weekly-summary/:staffId', verifyAdmin, async (req,
 });
 
 // Payroll endpoints
-router.get('/staff/payroll/weekly', async (req, res) => {
+router.get('/staff/payroll/weekly', requireManager, async (req, res) => {
   // Get all staff with their weekly summaries
   const { rows: staffRows } = await pool.query(
     'SELECT id, nombre, tipo, hourly_rate FROM staff WHERE activo = 1 ORDER BY nombre'
