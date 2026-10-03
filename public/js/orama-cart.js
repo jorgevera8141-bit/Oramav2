@@ -1,5 +1,6 @@
 async function nuevaOrden() {
-  const [mesasData, menuData] = await Promise.all([api('/api/mesas'), api('/api/menu')]);
+  const [mesasData, menuData, openOrdersData] = await Promise.all([api('/api/mesas'), api('/api/menu'), api('/api/ordenes')]);
+  const openOrders = (openOrdersData.ordenes || []).filter((order) => order.status === 'abierta');
   const mesas = (mesasData.mesas || []).slice();
   const items = (menuData.menu || []).filter((item) => item.activo);
   const categories = ['Todos', ...new Set(items.map((item) => item.categoria))];
@@ -109,7 +110,7 @@ async function nuevaOrden() {
 
   function renderMesaStep() {
     app.innerHTML = pageHead('Nueva orden', 'Elige una mesa', 'Selecciona dónde se sirve esta orden') +
-      `<section class="mesa-grid">${mesas.length ? mesas.map((mesa) => `<button type="button" class="mesa-card selectable ${mesa.status === 'ocupada' ? 'occupied' : ''}" data-mesa-id="${mesa.id}" data-mesa-nombre="${escapeHtml(mesa.nombre)}"><h2 class="mesa-name">${escapeHtml(mesa.nombre)}</h2>${statusBadge(mesa.status)}${mesa.status === 'ocupada' ? '<p class="subtle" style="margin:8px 0 0;font-size:12px">Ya tiene una orden abierta; esta será otra.</p>' : ''}</button>`).join('') : '<div class="empty">No hay mesas configuradas</div>'}</section>`;
+      `<section class="mesa-grid">${mesas.length ? mesas.map((mesa) => `<button type="button" class="mesa-card selectable ${mesa.status === 'ocupada' ? 'occupied' : ''}" data-mesa-id="${mesa.id}" data-mesa-nombre="${escapeHtml(mesa.nombre)}"><h2 class="mesa-name">${escapeHtml(mesa.nombre)}</h2>${statusBadge(mesa.status)}${mesa.status === 'ocupada' ? `${mesaTab(mesa, openOrders)}<p class="mesa-note">Esta será otra orden en la misma mesa.</p>` : ''}</button>`).join('') : '<div class="empty">No hay mesas configuradas</div>'}</section>`;
   }
 
   function renderMenuStep() {
@@ -134,7 +135,7 @@ async function nuevaOrden() {
       return;
     }
 
-    const addButton = event.target.closest('[data-add-id]');
+    const addButton = event.target.closest('[data-add-id]') || event.target.closest('.menu-item-card')?.querySelector('[data-add-id]');
     if (addButton) { addToCart(Number(addButton.dataset.addId)); return; }
 
     const removeButton = event.target.closest('[data-remove-id]');

@@ -116,8 +116,9 @@ function orderTable(orders) {
 }
 
 async function mesas() {
-  const data = await api('/api/mesas');
-  app.innerHTML = pageHead('Sala', 'Mesas', 'Estado de las mesas en tiempo real') + `<section class="mesa-grid">${(data.mesas || []).map((mesa) => `<article class="mesa-card ${mesa.status === 'ocupada' ? 'occupied' : ''}"><h2 class="mesa-name">${escapeHtml(mesa.nombre)}</h2>${statusBadge(mesa.status)}</article>`).join('') || '<div class="empty">No hay mesas configuradas</div>'}</section>`;
+  const [data, ordersData] = await Promise.all([api('/api/mesas'), api('/api/ordenes')]);
+  const openOrders = (ordersData.ordenes || []).filter((order) => order.status === 'abierta');
+  app.innerHTML = pageHead('Sala', 'Mesas', 'Estado de las mesas en tiempo real') + `<section class="mesa-grid">${(data.mesas || []).map((mesa) => `<article class="mesa-card ${mesa.status === 'ocupada' ? 'occupied' : ''}"><h2 class="mesa-name">${escapeHtml(mesa.nombre)}</h2>${statusBadge(mesa.status)}${mesaTab(mesa, openOrders)}</article>`).join('') || '<div class="empty">No hay mesas configuradas</div>'}</section>`;
 }
 
 async function orders() {
