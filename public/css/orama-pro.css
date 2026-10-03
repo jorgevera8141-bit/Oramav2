@@ -208,3 +208,11 @@ main{position:relative;z-index:1}
 .mesa-tab{display:flex;flex-direction:column;gap:2px;margin:var(--space-3) 0 0;color:var(--amber);font-size:13px}
 .mesa-tab .mono{font-size:18px;font-weight:600}
 .mesa-note{margin:var(--space-2) 0 0;color:var(--muted);font-size:12px}
+/* Order taking: two columns on a tablet, one tap anywhere on the product, one look for every category chip */
+#cart-menu-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--space-3)}
+#cart-menu-items .menu-item-card{margin-bottom:0;cursor:pointer;min-height:72px}
+#cart-menu-items .menu-item-card:active{border-color:var(--teal);background:var(--teal-soft)}
+#cart-menu-items .empty{grid-column:1/-1}
+.pill.has-photo{color:var(--muted);text-shadow:none;border-color:var(--espresso)}
+.pill.has-photo::before{display:none}
+.pill.has-photo:hover,.pill.has-photo.active{outline:0;border-color:var(--teal);background:var(--teal-soft);color:var(--cream)}
