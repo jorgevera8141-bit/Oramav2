@@ -6,12 +6,13 @@ const {
   ingredientLineSchema,
   extraCostsSchema,
   priceCalculationSchema,
-  taxSettingsSchema,
+  settingsSchema,
   priceCalculationResultSchema,
   recipeSaveSchema
 } = require('./schemas');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { getTaxSettings, saveTaxSettings } = require('../../shared/tax');
+const { getBusinessSettings, saveBusinessSettings, getObservedMonthlyUnits } = require('../../shared/business');
 const { calculatePricing } = require('./calculator');
 const {
   getProductById,
@@ -20,7 +21,8 @@ const {
   searchInventoryItems,
   resolveIngredientsCost,
   saveRecipe,
-  getCurrentRecipe
+  getCurrentRecipe,
+  listRecipes
 } = require('./service');
 
 const router = express.Router();
@@ -73,10 +75,11 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
       menuPrice = Number(product.precio);
     }
 
-    const [ingredientsCost, tax] = await Promise.all([resolveIngredientsCost(ingredients), getTaxSettings(pool)]);
+    const [ingredientsCost, tax, business] = await Promise.all([resolveIngredientsCost(ingredients), getTaxSettings(pool), getBusinessSettings(pool)]);
     const calculation = calculatePricing(
-      { ingredientsCost, extraCosts, preparation, fixedCosts, estimatedMonthlyUnits, targetMargin, includeIVA, menuPrice },
-      tax
+      { ingredientsCost, extraCosts, preparation, fixedCosts: fixedCosts || business.fixedCosts, estimatedMonthlyUnits, targetMargin, includeIVA, menuPrice },
+      tax,
+      business
     );
     res.json({ success: true, calculation });
   } catch (error) {
@@ -86,59 +89,47 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
 
 // IVA settings: whether menu prices include IVA, and the rate. Readable by anyone behind the café code;
 // only a manager can change them (they decide how every margin is shown).
+async function readSettings() {
+  const [tax, business, observedMonthlyUnits] = await Promise.all([getTaxSettings(pool), getBusinessSettings(pool), getObservedMonthlyUnits(pool)]);
+  return { ...tax, ...business, observedMonthlyUnits };
+}
+
 router.get('/settings', async (_req, res) => {
-  res.json({ success: true, settings: await getTaxSettings(pool) });
+  res.json({ success: true, settings: await readSettings() });
 });
 
-router.post('/settings', verifyAdmin, validate(taxSettingsSchema), async (req, res) => {
-  await saveTaxSettings(pool, req.body);
-  res.json({ success: true, settings: await getTaxSettings(pool) });
+router.post('/settings', verifyAdmin, validate(settingsSchema), async (req, res) => {
+  const { ivaRate, pricesIncludeIva, cardFeePct, cardSharePct, paidPerFree, roundTo, fixedCosts } = req.body;
+  if (ivaRate !== undefined || pricesIncludeIva !== undefined) {
+    const current = await getTaxSettings(pool);
+    await saveTaxSettings(pool, { ivaRate: ivaRate ?? current.ivaRate, pricesIncludeIva: pricesIncludeIva ?? current.pricesIncludeIva });
+  }
+  await saveBusinessSettings(pool, { cardFeePct, cardSharePct, paidPerFree, roundTo, fixedCosts });
+  res.json({ success: true, settings: await readSettings() });
 });
 
 // Save recipe (admin-only)
 router.post('/recipe/save', verifyAdmin, validate(recipeSaveSchema), async (req, res) => {
-  try {
-    const { menuItemId, recipeName, ingredients, extraCosts, targetMargin, includeIVA } = req.body;
-    
-    // Verify the menu item exists
-    const product = await getProductById(menuItemId);
-    if (!product) {
-      return res.status(404).json({ success: false, error: 'Producto no encontrado' });
-    }
-    
-    // Save the recipe
-    await saveRecipe({
-      menuItemId,
-      ingredients,
-      extraCosts,
-      targetMargin,
-      includeIVA
-    });
-    
-    res.json({ success: true, message: 'Receta guardada exitosamente' });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+  const { menuItemId, ingredients, extraCosts } = req.body;
+  const product = await getProductById(menuItemId);
+  if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado', error: 'Producto no encontrado' });
+  const saved = await saveRecipe({ menuItemId, ingredients, extraCosts });
+  res.json({ success: true, message: 'Receta guardada exitosamente', ingredients: saved.ingredients });
 });
 
-// Get current recipe for a menu item (admin-only)
-router.get('/recipe/:menuItemId', verifyAdmin, async (req, res) => {
-  try {
-    const { menuItemId } = req.params;
-    
-    // Verify the menu item exists
-    const product = await getProductById(menuItemId);
-    if (!product) {
-      return res.status(404).json({ success: false, error: 'Producto no encontrado' });
-    }
-    
-    // Get current recipe
-    const recipe = await getCurrentRecipe(menuItemId);
-    
-    res.json({ success: true, recipe });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+// Menu items that already have a recipe (no auth, same as the product list)
+router.get('/recipes', async (_req, res) => {
+  res.json({ success: true, recipes: await listRecipes() });
+});
+
+// The saved recipe of one menu item: ingredients in inventory units plus its extra costs
+router.get('/recipe/:menuItemId', async (req, res) => {
+  const menuItemId = Number(req.params.menuItemId);
+  if (!Number.isInteger(menuItemId) || menuItemId <= 0) return res.status(400).json({ success: false, message: 'Producto inválido', error: 'Producto inválido' });
+  const product = await getProductById(menuItemId);
+  if (!product) return res.status(404).json({ success: false, message: 'Producto no encontrado', error: 'Producto no encontrado' });
+  const { ingredients, extraCosts } = await getCurrentRecipe(menuItemId);
+  res.json({ success: true, recipe: ingredients, extraCosts });
 });
 
 // Get pricing settings or history (if we implement saving calculations)

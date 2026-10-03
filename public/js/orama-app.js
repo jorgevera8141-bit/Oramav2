@@ -1013,6 +1013,9 @@ async function loadCorregirTab(nombre, pin) {
 // The manager who opened the Calculadora. Its routes are manager-only and check name and PIN on every request;
 // the calculate request used to send neither, so "Calcular Precio" was always refused. Cleared on leaving the page.
 let pricingAuth = null;
+let pricingSettings = null;
+let pricingInventory = [];
+let lastPricingResult = null;
 
 async function pricing() {
   // Check if user is management via PIN
@@ -1041,20 +1044,36 @@ async function pricing() {
         <div class="tab-content" id="calculator-tab">
           <h3>Calculadora de Costos</h3>
           <div class="form-section" id="taxSettings">
-            <label>IVA</label>
+            <label>Ajustes del negocio (se guardan para todos los cálculos)</label>
             <div class="cost-grid">
               <div>
                 <label for="ivaRate">Tasa de IVA (%):</label>
                 <input type="number" id="ivaRate" min="0" max="100" step="0.1" value="16">
               </div>
               <div>
+                <label for="cardFeePct">Comisión de la terminal (%):</label>
+                <input type="number" id="cardFeePct" min="0" max="20" step="0.01" value="0">
+              </div>
+              <div>
+                <label for="cardSharePct">Ventas que se pagan con tarjeta (%):</label>
+                <input type="number" id="cardSharePct" min="0" max="100" step="1" value="0">
+              </div>
+              <div>
+                <label for="paidPerFree">Bebidas pagadas por cada gratis:</label>
+                <input type="number" id="paidPerFree" min="0" step="1" value="0">
+              </div>
+              <div>
+                <label for="roundTo">Redondear el precio de menú a ($):</label>
+                <input type="number" id="roundTo" min="0" step="0.5" value="0">
+              </div>
+              <div>
                 <label><input type="checkbox" id="pricesIncludeIva" checked> Los precios de mi menú ya incluyen IVA</label>
               </div>
               <div>
-                <button type="button" class="button" id="saveTaxBtn">Guardar IVA</button>
+                <button type="button" class="button" id="saveTaxBtn">Guardar ajustes</button>
               </div>
             </div>
-            <p class="subtle">Los márgenes se calculan sobre el precio sin IVA, que es lo que realmente gana el negocio. Un precio de $43 con IVA del 16% deja $37.07.</p>
+            <p class="subtle">Los márgenes se calculan sobre el precio sin IVA, que es lo que realmente gana el negocio. Un precio de $43 con IVA del 16% deja $37.07. La comisión de la terminal y las bebidas gratis del programa de lealtad (ej. 10 pagadas y 1 gratis) se suman al costo para que el precio las cubra. Con 0 no se agregan. Los costos fijos de abajo se guardan con este botón.</p>
           </div>
           <div class="form-section">
             <label for="productSelect">Producto existente:</label>
@@ -1069,7 +1088,13 @@ async function pricing() {
           <div class="form-section">
             <label>Insumos: cuánto usas por porción y cuánto cuesta, como lo compras:</label>
             <div id="ingredientsContainer"></div>
+            <datalist id="inventoryList"></datalist>
             <button class="button secondary" type="button" onclick="addIngredientField()">+ Agregar insumo</button>
+            <span class="scale-recipe">
+              <label for="scaleFactor">Multiplicar cantidades por:</label>
+              <input type="number" id="scaleFactor" min="0.01" step="0.05" value="1" aria-label="Factor para escalar las cantidades (ej. 1.5 de chico a grande)">
+              <button class="button small" type="button" id="scaleBtn">Aplicar</button>
+            </span>
             <p class="subtle">Ejemplo: usas 18 g de café que compras a $450 por kg: Cantidad 18, unidad g, costo 450, "por kg". El sistema convierte las unidades solo. Todos los insumos necesitan un costo.</p>
           </div>
           <div class="form-section">
@@ -1107,10 +1132,14 @@ async function pricing() {
                 <label>Otros (MXN):</label>
                 <input type="number" id="extraOther" step="0.01" min="0" value="0">
               </div>
+              <div>
+                <label>Mano de obra fija por porción (MXN, si no usas el tiempo de preparación):</label>
+                <input type="number" id="extraLabor" step="0.01" min="0" value="0">
+              </div>
             </div>
           </div>
           <div class="form-section">
-            <label>Costos fijos mensuales (para el precio de costo completo):</label>
+            <label>Costos fijos mensuales de todo el café (se reparten entre todas las unidades que vende, no solo este producto):</label>
             <div class="cost-grid">
               <div>
                 <label>Renta (MXN):</label>
@@ -1129,8 +1158,9 @@ async function pricing() {
                 <input type="number" id="fixedOther" step="0.01" min="0" value="0">
               </div>
               <div>
-                <label>Unidades vendidas al mes (estimado):</label>
+                <label>Unidades totales que vende TODO el café al mes (todos los productos):</label>
                 <input type="number" id="estimatedMonthlyUnits" step="1" min="0" value="0">
+                <button type="button" class="button small" id="useObservedUnitsBtn">Usar ventas reales (30 días)</button>
               </div>
             </div>
           </div>
@@ -1193,12 +1223,21 @@ async function pricing() {
     // Add event listeners
     document.getElementById('calculatePriceBtn').addEventListener('click', calculatePrice);
     document.getElementById('loadRecipesBtn').addEventListener('click', loadSavedRecipes);
+    document.getElementById('scaleBtn').addEventListener('click', scaleQuantities);
+    document.getElementById('productSelect').addEventListener('change', (event) => loadRecipeIntoForm(event.target.value));
+    loadInventoryList();
 
     // IVA setting (this whole page is managers-only; the save re-checks the manager PIN on the server)
     try {
       const { settings } = await api('/api/pricing/settings');
+      pricingSettings = settings;
       document.getElementById('ivaRate').value = settings.ivaRate;
       document.getElementById('pricesIncludeIva').checked = settings.pricesIncludeIva;
+      document.getElementById('cardFeePct').value = settings.cardFeePct;
+      document.getElementById('cardSharePct').value = settings.cardSharePct;
+      document.getElementById('paidPerFree').value = settings.paidPerFree;
+      document.getElementById('roundTo').value = settings.roundTo;
+      document.getElementById('useObservedUnitsBtn').textContent = `Usar ventas reales (${settings.observedMonthlyUnits} en 30 días)`;
     } catch (error) {
       console.error(error);
     }
@@ -1207,9 +1246,9 @@ async function pricing() {
         await api('/api/pricing/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre, pin, ivaRate: parseFloat(document.getElementById('ivaRate').value) || 0, pricesIncludeIva: document.getElementById('pricesIncludeIva').checked })
+          body: JSON.stringify({ nombre, pin, ...readBusinessSettingsForm() })
         });
-        Orama.toast('IVA guardado', 'success');
+        Orama.toast('Ajustes guardados', 'success');
       } catch (error) {
         Orama.toast(error.message, 'error');
       }
@@ -1222,11 +1261,16 @@ async function pricing() {
 
     // Remember monthly fixed costs between visits (rent/phone/payroll rarely change)
     restoreFixedCostInputs();
+    applySavedFixedCosts(pricingSettings);
+    document.getElementById('useObservedUnitsBtn').addEventListener('click', () => {
+      document.getElementById('estimatedMonthlyUnits').value = pricingSettings?.observedMonthlyUnits || 0;
+      saveFixedCostInputs();
+    });
     ['fixedRent', 'fixedPhone', 'fixedPayroll', 'fixedOther', 'estimatedMonthlyUnits', 'laborRatePerHour'].forEach((id) => {
       document.getElementById(id).addEventListener('change', saveFixedCostInputs);
     });
 
-    return () => { pricingAuth = null; };
+    return () => { pricingAuth = null; pricingInventory = []; lastPricingResult = null; };
   } catch (error) {
     Orama.toast('Error al acceder a la calculadora: ' + error.message, 'error');
     console.error(error);
@@ -1235,6 +1279,29 @@ async function pricing() {
 
 // Helper functions for the pricing interface
 const FIXED_COST_STORAGE_KEY = 'orama-pricing-fixed-costs';
+
+function readBusinessSettingsForm() {
+  const number = (id) => parseFloat(document.getElementById(id).value) || 0;
+  return {
+    ivaRate: number('ivaRate'),
+    pricesIncludeIva: document.getElementById('pricesIncludeIva').checked,
+    cardFeePct: number('cardFeePct'),
+    cardSharePct: number('cardSharePct'),
+    paidPerFree: number('paidPerFree'),
+    roundTo: number('roundTo'),
+    fixedCosts: { rent: number('fixedRent'), phoneInternet: number('fixedPhone'), payroll: number('fixedPayroll'), other: number('fixedOther') }
+  };
+}
+
+// Overhead saved on the server is the same on every device; it wins over what this browser remembered.
+function applySavedFixedCosts(settings) {
+  const fixed = settings?.fixedCosts;
+  if (!fixed || !Object.values(fixed).some((value) => value > 0)) return;
+  document.getElementById('fixedRent').value = fixed.rent;
+  document.getElementById('fixedPhone').value = fixed.phoneInternet;
+  document.getElementById('fixedPayroll').value = fixed.payroll;
+  document.getElementById('fixedOther').value = fixed.other;
+}
 
 function saveFixedCostInputs() {
   try {
@@ -1274,13 +1341,14 @@ function unitOptions(selected) {
 
 function ingredientRowMarkup() {
   return `
-    <input type="text" class="ingredient-name" placeholder="Insumo (ej. Café)" aria-label="Insumo">
+    <input type="text" class="ingredient-name" list="inventoryList" placeholder="Insumo (ej. Café)" aria-label="Insumo" onchange="matchInventoryItem(this)">
     <input type="number" class="quantity" placeholder="Cantidad" step="0.01" min="0" aria-label="Cantidad usada por porción">
     <select class="unit" aria-label="Unidad de la cantidad" onchange="syncCostUnit(this)">${unitOptions('g')}</select>
     <span class="ingredient-cost-label">costo $</span>
     <input type="number" class="unit-cost" placeholder="Costo" step="0.01" min="0" aria-label="Costo del insumo">
     <span class="ingredient-cost-label">por</span>
     <select class="cost-unit" aria-label="El costo es por">${unitOptions('kg')}</select>
+    <input type="number" class="yield-pct" placeholder="Rend. %" step="1" min="1" max="100" title="Rendimiento: % de lo que compras que sí usas (merma). Vacío = 100" aria-label="Rendimiento en porcentaje">
     <button class="button small danger" type="button" onclick="removeIngredient(this)" aria-label="Quitar insumo">-</button>
   `;
 }
@@ -1340,6 +1408,7 @@ async function calculatePrice() {
       const unit = unitInput.value;
       const costUnit = costUnitInput.value;
       const unitCost = parseFloat(costInput.value) || 0;
+      const yieldPct = parseFloat(row.querySelector('.yield-pct').value);
 
       if (!name) {
         hasError = true;
@@ -1362,7 +1431,7 @@ async function calculatePrice() {
         costInput.style.borderColor = '';
       }
 
-      ingredients.push({ ingredientName: name, quantityPerServing: quantity, unit, costUnit, unitCost });
+      ingredients.push({ ingredientName: name, quantityPerServing: quantity, unit, costUnit, unitCost, ...(yieldPct > 0 ? { yieldPct } : {}) });
     });
 
     if (hasError) {
@@ -1372,6 +1441,7 @@ async function calculatePrice() {
 
     const extraCosts = {
       packaging: parseFloat(document.getElementById('extraPackaging').value) || 0,
+      labor: parseFloat(document.getElementById('extraLabor').value) || 0,
       other: parseFloat(document.getElementById('extraOther').value) || 0
     };
 
@@ -1414,6 +1484,7 @@ async function calculatePrice() {
 
     if (response.success) {
       const result = response.calculation;
+      lastPricingResult = result;
       showResults(result);
     } else {
       Orama.toast('Error en el cálculo: ' + (response.error || 'Error desconocido'), 'error');
@@ -1470,6 +1541,22 @@ function showResults(result) {
         <label>Diferencia vs. el precio del menú:</label>
         <p class="price-label">${result.savingsOrShortfall >= 0 ? '+' : ''}${money.format(result.savingsOrShortfall)}</p>
       </div>
+      ${result.roundedMenuPrice !== null ? `
+      <div>
+        <label>Precio de menú redondeado:</label>
+        <p class="price-label">${money.format(result.roundedMenuPrice)}</p>
+        <p class="subtle">Deja ${result.marginAtRoundedPrice.toFixed(1)}% de margen</p>
+      </div>` : ''}
+      ${result.compsCostPerServing > 0 ? `
+      <div>
+        <label>Bebidas gratis (lealtad), por bebida pagada:</label>
+        <p class="price-label">${money.format(result.compsCostPerServing)}</p>
+      </div>` : ''}
+      ${result.cardFeeRatePct > 0 ? `
+      <div>
+        <label>Comisión de tarjeta (% del precio sin IVA):</label>
+        <p class="price-label">${result.cardFeeRatePct.toFixed(2)}%</p>
+      </div>` : ''}
     </div>
 
     <h3 class="mt-4">Costo primo (Prime Cost)</h3>
@@ -1499,7 +1586,7 @@ function showResults(result) {
 
     ${result.fullCostSellingPrice !== null && result.fullCostSellingPrice !== undefined ? `
       <h3 class="mt-4">Precio de costo completo (incluye renta, teléfono y nómina fija)</h3>
-      <p class="subtle">Costos fijos mensuales: ${money.format(result.totalMonthlyFixedCosts)} ÷ ${result.estimatedMonthlyUnits} unidades/mes = ${money.format(result.fixedCostPerUnit)} de costo fijo por unidad</p>
+      <p class="subtle">Costos fijos mensuales de todo el café: ${money.format(result.totalMonthlyFixedCosts)} ÷ ${result.estimatedMonthlyUnits} unidades totales al mes = ${money.format(result.fixedCostPerUnit)} de costo fijo por unidad</p>
       <div class="results-grid">
         <div>
           <label>Costo completo por porción:</label>
@@ -1529,77 +1616,138 @@ function showResults(result) {
   `;
 }
 
-async function saveAsRecipe() {
+// Ingredients come from the inventory so a saved recipe can deduct stock and cost itself from real prices.
+async function loadInventoryList() {
   try {
-    const btn = document.querySelector('.results-section .button.secondary');
-    btn.disabled = true;
-    btn.textContent = 'Guardando…';
+    const { items } = await api('/api/pricing/inventory/search?q=');
+    pricingInventory = items || [];
+    document.getElementById('inventoryList').innerHTML = pricingInventory.map((item) => `<option value="${escapeHtml(item.name)}"></option>`).join('');
+  } catch (error) {
+    console.error('Error loading inventory:', error);
+  }
+}
 
-    const productId = document.getElementById('productSelect').value;
-    const productName = document.getElementById('newProductName').value.trim();
-    const targetMargin = parseFloat(document.getElementById('targetMargin').value) || 0;
-    const includeIVA = document.getElementById('includeIVA').checked;
+// Picking an inventory name fills its cost and the unit that cost is quoted in, and remembers which item it is.
+function matchInventoryItem(input) {
+  const row = input.closest('.ingredient-row');
+  const item = pricingInventory.find((candidate) => candidate.name.toLowerCase() === input.value.trim().toLowerCase());
+  if (!item) { delete row.dataset.inventoryId; return; }
+  row.dataset.inventoryId = item.id;
+  const cost = Number(item.unit_cost) || 0;
+  if (cost > 0) row.querySelector('.unit-cost').value = cost;
+  if (INGREDIENT_UNITS.includes(item.unit)) row.querySelector('.cost-unit').value = item.unit;
+}
 
-    if (!productId && !productName) {
-      Orama.toast('Seleccione un producto existente o ingrese un nombre para un nuevo producto', 'error');
+// Sizes are separate menu items (CHICO, GRANDE): load one recipe, multiply, and save it on the other item.
+function scaleQuantities() {
+  const factor = parseFloat(document.getElementById('scaleFactor').value);
+  if (!(factor > 0)) { Orama.toast('El factor debe ser mayor a 0', 'error'); return; }
+  document.querySelectorAll('.ingredient-row .quantity').forEach((input) => {
+    const value = parseFloat(input.value);
+    if (value > 0) input.value = parseFloat((value * factor).toFixed(4));
+  });
+  document.getElementById('scaleFactor').value = 1;
+}
+
+async function loadRecipeIntoForm(menuItemId) {
+  if (!menuItemId) return;
+  try {
+    const { recipe, extraCosts } = await api(`/api/pricing/recipe/${menuItemId}`);
+    if (!recipe.length) return;
+    document.getElementById('ingredientsContainer').innerHTML = '';
+    recipe.forEach((line) => {
+      addIngredientField();
+      const row = document.querySelector('#ingredientsContainer .ingredient-row:last-child');
+      row.dataset.inventoryId = line.inventory_item_id;
+      row.querySelector('.ingredient-name').value = line.name;
+      row.querySelector('.quantity').value = parseFloat(Number(line.quantity_used).toFixed(4));
+      if (INGREDIENT_UNITS.includes(line.unit)) {
+        row.querySelector('.unit').value = line.unit;
+        row.querySelector('.cost-unit').value = line.unit;
+      }
+      row.querySelector('.unit-cost').value = Number(line.unit_cost) || '';
+    });
+    document.getElementById('extraPackaging').value = Number(extraCosts.packaging) || 0;
+    document.getElementById('extraOther').value = Number(extraCosts.other) || 0;
+    document.getElementById('extraLabor').value = Number(extraCosts.labor) || 0;
+    document.getElementById('prepTimeMinutes').value = 0;
+    Orama.toast('Receta guardada cargada. Cambia lo que necesites y calcula.', 'success');
+  } catch (error) {
+    Orama.toast(error.message, 'error');
+  }
+}
+
+async function saveAsRecipe() {
+  const btn = document.querySelector('.results-section .button.secondary');
+  try {
+    const menuItemId = parseInt(document.getElementById('productSelect').value, 10);
+    if (!menuItemId) {
+      Orama.toast('Elige el producto existente al que pertenece esta receta', 'error');
       return;
     }
 
-    // Collect ingredients for saving
     const ingredients = [];
-    const ingredientRows = document.querySelectorAll('.ingredient-row');
-    ingredientRows.forEach(row => {
-      const nameInput = row.querySelector('.ingredient-name');
-      const quantityInput = row.querySelector('.quantity');
-      const unitInput = row.querySelector('.unit');
-
-      const name = nameInput.value.trim();
-      const quantity = parseFloat(quantityInput.value) || 0;
-      const unit = unitInput.value.trim() || 'pieza';
-
-      if (name && quantity > 0) {
-        ingredients.push({ name, quantity, unit });
-      }
+    const unmatched = [];
+    document.querySelectorAll('.ingredient-row').forEach((row) => {
+      const name = row.querySelector('.ingredient-name').value.trim();
+      const quantityUsed = parseFloat(row.querySelector('.quantity').value) || 0;
+      if (!name || !(quantityUsed > 0)) return;
+      if (!row.dataset.inventoryId) { unmatched.push(name); return; }
+      const yieldPct = parseFloat(row.querySelector('.yield-pct').value);
+      ingredients.push({ inventoryItemId: parseInt(row.dataset.inventoryId, 10), quantityUsed, unit: row.querySelector('.unit').value, ...(yieldPct > 0 ? { yieldPct } : {}) });
     });
-
-    // If we have a product ID, save as recipe for that product
-    if (productId) {
-      // First, we need to find or create inventory items for each ingredient
-      // For simplicity in this example, we'll just show a message
-      // In a full implementation, we'd match ingredients to inventory items
-      Orama.toast('Para guardar como receta oficial, los ingredientes deben coincidir con artículos de inventario existentes', 'info');
-    } else {
-      Orama.toast('Seleccione un producto existente para guardar la receta', 'warning');
+    if (unmatched.length) {
+      Orama.toast(`Estos insumos no están en el inventario, elígelos de la lista: ${unmatched.join(', ')}`, 'error');
+      return;
     }
+    if (!ingredients.length) { Orama.toast('Agrega al menos un insumo con cantidad', 'error'); return; }
+    if (!lastPricingResult) { Orama.toast('Calcula el precio antes de guardar la receta', 'error'); return; }
 
-    btn.disabled = false;
-    btn.textContent = 'Guardar como receta';
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+    // Labour is saved as the per-serving figure the calculation used, whether it came from prep time or the fixed field.
+    const extraCosts = {
+      packaging: lastPricingResult.packagingCost,
+      labor: lastPricingResult.laborCostPerServing,
+      other: parseFloat(document.getElementById('extraOther').value) || 0
+    };
+    await api('/api/pricing/recipe/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...pricingAuth, menuItemId, ingredients, extraCosts })
+    });
+    Orama.toast('Receta guardada. El reporte de márgenes ya la usa.', 'success');
   } catch (error) {
-    document.querySelector('.results-section .button.secondary').disabled = false;
-    document.querySelector('.results-section .button.secondary').textContent = 'Guardar como receta';
     Orama.toast('Error al guardar receta: ' + error.message, 'error');
     console.error(error);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar como receta';
   }
 }
 
 async function loadSavedRecipes() {
+  const btn = document.getElementById('loadRecipesBtn');
   try {
-    const btn = document.getElementById('loadRecipesBtn');
     btn.disabled = true;
     btn.textContent = 'Cargando…';
-
-    // TODO: Implement loading saved recipes from API
-    // For now, show placeholder
-    const recipesList = document.getElementById('recipesList');
-    recipesList.innerHTML = '<p>Funcionalidad de recetas guardadas estará disponible en una futura actualización.</p>';
-
-    btn.disabled = false;
-    btn.textContent = 'Cargar Recetas';
+    const { recipes } = await api('/api/pricing/recipes');
+    const list = document.getElementById('recipesList');
+    list.innerHTML = recipes.length
+      ? recipes.map((recipe) => `<div class="recipe-row"><span>${escapeHtml(recipe.nombre)} <span class="subtle">${recipe.ingredientes} insumos</span></span><button class="button small" type="button" data-recipe-id="${recipe.id}">Abrir</button></div>`).join('')
+      : '<p class="empty">Todavía no hay recetas guardadas. Calcula un producto y usa "Guardar como receta".</p>';
+    list.querySelectorAll('[data-recipe-id]').forEach((button) => button.addEventListener('click', () => {
+      const select = document.getElementById('productSelect');
+      select.value = button.dataset.recipeId;
+      loadRecipeIntoForm(select.value);
+      select.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
   } catch (error) {
-    document.getElementById('loadRecipesBtn').disabled = false;
-    document.getElementById('loadRecipesBtn').textContent = 'Cargar Recetas';
     Orama.toast('Error al cargar recetas: ' + error.message, 'error');
     console.error(error);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Cargar Recetas';
   }
 }
 
@@ -1609,6 +1757,7 @@ window.removeIngredient = removeIngredient;
 window.calculatePrice = calculatePrice;
 window.saveAsRecipe = saveAsRecipe;
 window.loadSavedRecipes = loadSavedRecipes;
+window.matchInventoryItem = matchInventoryItem;
 
 Orama.routes.dashboard = dashboard;
 Orama.routes.mesas = mesas;

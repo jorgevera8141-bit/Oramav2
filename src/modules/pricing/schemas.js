@@ -13,7 +13,8 @@ const ingredientLineSchema = z.object({
   quantityPerServing: z.number().positive(),
   unit: z.string(), // the unit the quantity is in: kg, g, litro, ml, pieza
   costUnit: z.string().optional(), // the unit the cost is quoted in (defaults to `unit`); converted from `unit`
-  unitCost: z.number().nonnegative().optional() // If known, otherwise will be looked up
+  unitCost: z.number().nonnegative().optional(), // If known, otherwise will be looked up
+  yieldPct: z.number().optional() // percent of what is bought that is usable (waste); 100 when omitted
 });
 
 // Extra costs schema
@@ -47,7 +48,7 @@ const priceCalculationSchema = z.object({
   ingredients: z.array(ingredientLineSchema),
   extraCosts: extraCostsSchema,
   preparation: preparationSchema.default({}),
-  fixedCosts: fixedCostsSchema.default({}),
+  fixedCosts: fixedCostsSchema.optional(), // omit to use the overhead saved in the settings
   estimatedMonthlyUnits: z.number().positive().optional(), // omit to skip full-cost pricing
   targetMargin: z.number().min(0).lt(100, 'El margen objetivo debe ser menor a 100%.').default(30), // percent
   includeIVA: z.boolean().default(true)
@@ -84,17 +85,34 @@ const taxSettingsSchema = z.object({
   pricesIncludeIva: z.boolean()
 });
 
-// Recipe save schema
+// Business settings: every field optional so a client that only knows about IVA still works.
+const businessSettingsSchema = z.object({
+  cardFeePct: z.number().min(0).max(20).optional(),
+  cardSharePct: z.number().min(0).max(100).optional(),
+  paidPerFree: z.number().min(0).max(1000).optional(),
+  roundTo: z.number().min(0).max(1000).optional(),
+  fixedCosts: z.object({
+    rent: z.number().min(0).optional(),
+    phoneInternet: z.number().min(0).optional(),
+    payroll: z.number().min(0).optional(),
+    other: z.number().min(0).optional()
+  }).optional()
+});
+
+const settingsSchema = taxSettingsSchema.partial().and(businessSettingsSchema);
+
+// Recipe save schema: ingredients are inventory items (quantity in `unit`, converted to the inventory's own
+// unit when stored) and the per-serving costs that are not ingredients.
 const recipeSaveSchema = z.object({
   menuItemId: z.number().int().positive(),
-  recipeName: z.string(),
+  recipeName: z.string().optional(),
   ingredients: z.array(z.object({
     inventoryItemId: z.number().int().positive(),
-    quantityUsed: z.number().positive()
-  })),
-  extraCosts: extraCostsSchema,
-  targetMargin: z.number().min(0).lt(100, 'El margen objetivo debe ser menor a 100%.'),
-  includeIVA: z.boolean()
+    quantityUsed: z.number().positive(),
+    unit: z.string().optional(),
+    yieldPct: z.number().optional()
+  })).min(1, 'La receta necesita al menos un insumo.'),
+  extraCosts: extraCostsSchema
 });
 
 module.exports = {
@@ -106,5 +124,7 @@ module.exports = {
   priceCalculationSchema,
   priceCalculationResultSchema,
   taxSettingsSchema,
+  businessSettingsSchema,
+  settingsSchema,
   recipeSaveSchema
 };

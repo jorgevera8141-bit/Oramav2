@@ -169,6 +169,15 @@ async function initDb() {
     quantity_used NUMERIC NOT NULL DEFAULT 0,
     UNIQUE(menu_item_id, inventory_item_id)
   )`);
+  // Per-serving costs of a menu item that are not ingredients (packaging, labour, other): the margins report
+  // adds them to the recipe's ingredient cost.
+  await pool.query(`CREATE TABLE IF NOT EXISTS menu_item_costs (
+    menu_item_id INTEGER PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE,
+    packaging NUMERIC NOT NULL DEFAULT 0,
+    labor NUMERIC NOT NULL DEFAULT 0,
+    other NUMERIC NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS inventory_movements (
     id SERIAL PRIMARY KEY,
     inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
