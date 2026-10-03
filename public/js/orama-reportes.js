@@ -24,7 +24,7 @@ function rangeForPeriod(period) {
   else if (period === '30d') from.setDate(from.getDate() - 29);
   else if (period === '90d') from.setDate(from.getDate() - 89);
   else from.setDate(from.getDate() - 6);
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  return { from: businessDate(from), to: businessDate(to) };
 }
 
 function deltaMarkup(current, previous, formatter) {
@@ -101,6 +101,7 @@ async function reportes() {
           <p class="kpi-label">Ingresos</p>
           <p class="kpi-value">${money.format(current.ingresos)}</p>
           ${deltaMarkup(current.ingresos, previous.ingresos, (v) => money.format(v))}
+          ${current.cortesias > 0 ? `<div class="kpi-delta flat">Cortesías: ${money.format(current.cortesias)}</div>` : ''}
         </article>
         <article class="glass-card">
           <p class="kpi-label">Órdenes</p>

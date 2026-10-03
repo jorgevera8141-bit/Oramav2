@@ -97,6 +97,9 @@ async function dashboard() {
   const closed = orders.filter((order) => order.status === 'cerrada');
   const cash = closed.reduce((sum, order) => sum + Number(order.amount_cash || 0), 0);
   const card = closed.reduce((sum, order) => sum + Number(order.amount_card || 0), 0);
+  // Comped orders (cortesía, canje, a comped share of a split) are giveaways, not sales.
+  const comps = closed.reduce((sum, order) => sum + Number(order.comp_value || 0), 0);
+  const sales = closed.reduce((sum, order) => sum + Number(order.total || 0), 0) - comps;
   const open = orders.filter((order) => order.status === 'abierta');
 
   app.innerHTML = pageHead(
@@ -105,7 +108,7 @@ async function dashboard() {
     new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }),
     '/images/cafe-ambiance.jpg',
     '<a class="button primary" href="#nueva-orden">Nueva orden</a>'
-  ) + `<section class="grid"><article class="glass-card"><p class="kpi-label">Ventas hoy</p><p class="kpi-value">${money.format(closed.reduce((sum, order) => sum + Number(order.total || 0), 0))}</p></article><article class="glass-card"><p class="kpi-label">Efectivo</p><p class="kpi-value">${money.format(cash)}</p></article><article class="glass-card"><p class="kpi-label">Tarjeta</p><p class="kpi-value">${money.format(card)}</p></article><article class="glass-card kpi-card warn"><p class="kpi-label">Inventario bajo</p><p class="kpi-value">${inventoryData.count || 0}</p></article></section><section class="panel"><div class="panel-head"><h2>Órdenes abiertas</h2><span class="subtle">${open.length} activas</span></div>${orderTable(open)}</section>`;
+  ) + `<section class="grid"><article class="glass-card"><p class="kpi-label">Ventas hoy</p><p class="kpi-value">${money.format(sales)}</p>${comps > 0 ? `<div class="kpi-delta flat">Cortesías: ${money.format(comps)}</div>` : ''}</article><article class="glass-card"><p class="kpi-label">Efectivo</p><p class="kpi-value">${money.format(cash)}</p></article><article class="glass-card"><p class="kpi-label">Tarjeta</p><p class="kpi-value">${money.format(card)}</p></article><article class="glass-card kpi-card warn"><p class="kpi-label">Inventario bajo</p><p class="kpi-value">${inventoryData.count || 0}</p></article></section><section class="panel"><div class="panel-head"><h2>Órdenes abiertas</h2><span class="subtle">${open.length} activas</span></div>${orderTable(open)}</section>`;
 }
 
 function orderTable(orders) {

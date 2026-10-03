@@ -5,7 +5,7 @@ function defaultFinanzasRange() {
   const from = new Date(to);
   from.setMonth(from.getMonth() - 5);
   from.setDate(1);
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  return { from: businessDate(from), to: businessDate(to) };
 }
 
 async function finanzas() {
@@ -88,7 +88,7 @@ async function finanzas() {
           </div>
           <div class="field-group" style="margin-bottom:0"><label for="gasto-descripcion">Descripción</label><input class="search" id="gasto-descripcion" type="text" maxlength="200"></div>
           <div class="field-group" style="margin-bottom:0"><label for="gasto-monto">Monto</label><input class="search" id="gasto-monto" type="number" min="0.01" step="0.01" required></div>
-          <div class="field-group" style="margin-bottom:0"><label for="gasto-fecha">Fecha</label><input class="search" id="gasto-fecha" type="date" value="${new Date().toISOString().slice(0, 10)}" required></div>
+          <div class="field-group" style="margin-bottom:0"><label for="gasto-fecha">Fecha</label><input class="search" id="gasto-fecha" type="date" value="${businessDate()}" required></div>
           <button type="submit" class="button" style="align-self:flex-end">Agregar</button>
         </form>
       </section>
