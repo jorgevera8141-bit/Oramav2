@@ -49,3 +49,13 @@ test('incompatible or unknown units are refused instead of multiplied anyway', a
   await rejects(cost([{ ingredientName: 'Leche', quantityPerServing: 250, unit: 'ml', costUnit: 'kg', unitCost: 22 }]), /ml/);
   await rejects(cost([{ ingredientName: 'Sal', quantityPerServing: 1, unit: 'pizca', unitCost: 1 }]), /pizca/);
 });
+
+test('an ingredient that yields 80% (waste when trimming) costs 25% more per usable amount', async () => {
+  const total = await cost([{ ingredientName: 'Fruta', quantityPerServing: 100, unit: 'g', costUnit: 'kg', unitCost: 100, yieldPct: 80 }]);
+  assert.equal(Number(total.toFixed(2)), 12.5, '100 g at $100/kg is $10, over 0.8');
+});
+
+test('no yield means 100%, and a yield outside 1-100 is refused', async () => {
+  assert.equal(await cost([{ ingredientName: 'Vaso', quantityPerServing: 1, unit: 'pieza', unitCost: 3, yieldPct: 100 }]), 3);
+  await rejects(cost([{ ingredientName: 'Fruta', quantityPerServing: 1, unit: 'kg', unitCost: 10, yieldPct: 0 }]), /rendimiento/i);
+});

@@ -66,7 +66,12 @@ async function resolveIngredientsCost(ingredients, db = pool) {
       missing.push(line.ingredientName || `insumo #${line.inventoryItemId}`);
       continue;
     }
-    total += unitCost * convertQuantity(line.quantityPerServing, line.unit, costUnit);
+    const yieldPct = line.yieldPct === undefined ? 100 : Number(line.yieldPct);
+    if (!(yieldPct > 0 && yieldPct <= 100)) {
+      throw Object.assign(new Error(`El rendimiento de ${line.ingredientName || 'un insumo'} debe estar entre 1 y 100%.`), { statusCode: 400 });
+    }
+    // Waste (peel, trim, spillage): only yieldPct of what is bought ends up in the cup.
+    total += (unitCost * convertQuantity(line.quantityPerServing, line.unit, costUnit)) / (yieldPct / 100);
   }
   if (missing.length) {
     throw Object.assign(new Error(`Falta el costo de: ${missing.join(', ')}. Escríbelo para calcular el precio (si es casi gratis, pon un costo pequeño como 0.01).`), { statusCode: 400 });

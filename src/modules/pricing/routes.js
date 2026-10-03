@@ -6,12 +6,13 @@ const {
   ingredientLineSchema,
   extraCostsSchema,
   priceCalculationSchema,
-  taxSettingsSchema,
+  settingsSchema,
   priceCalculationResultSchema,
   recipeSaveSchema
 } = require('./schemas');
 const { verifyStaffPin } = require('../../shared/pin-auth');
 const { getTaxSettings, saveTaxSettings } = require('../../shared/tax');
+const { getBusinessSettings, saveBusinessSettings, getObservedMonthlyUnits } = require('../../shared/business');
 const { calculatePricing } = require('./calculator');
 const {
   getProductById,
@@ -73,10 +74,11 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
       menuPrice = Number(product.precio);
     }
 
-    const [ingredientsCost, tax] = await Promise.all([resolveIngredientsCost(ingredients), getTaxSettings(pool)]);
+    const [ingredientsCost, tax, business] = await Promise.all([resolveIngredientsCost(ingredients), getTaxSettings(pool), getBusinessSettings(pool)]);
     const calculation = calculatePricing(
-      { ingredientsCost, extraCosts, preparation, fixedCosts, estimatedMonthlyUnits, targetMargin, includeIVA, menuPrice },
-      tax
+      { ingredientsCost, extraCosts, preparation, fixedCosts: fixedCosts || business.fixedCosts, estimatedMonthlyUnits, targetMargin, includeIVA, menuPrice },
+      tax,
+      business
     );
     res.json({ success: true, calculation });
   } catch (error) {
@@ -86,13 +88,23 @@ router.post('/calculate', verifyAdmin, validate(priceCalculationSchema), async (
 
 // IVA settings: whether menu prices include IVA, and the rate. Readable by anyone behind the café code;
 // only a manager can change them (they decide how every margin is shown).
+async function readSettings() {
+  const [tax, business, observedMonthlyUnits] = await Promise.all([getTaxSettings(pool), getBusinessSettings(pool), getObservedMonthlyUnits(pool)]);
+  return { ...tax, ...business, observedMonthlyUnits };
+}
+
 router.get('/settings', async (_req, res) => {
-  res.json({ success: true, settings: await getTaxSettings(pool) });
+  res.json({ success: true, settings: await readSettings() });
 });
 
-router.post('/settings', verifyAdmin, validate(taxSettingsSchema), async (req, res) => {
-  await saveTaxSettings(pool, req.body);
-  res.json({ success: true, settings: await getTaxSettings(pool) });
+router.post('/settings', verifyAdmin, validate(settingsSchema), async (req, res) => {
+  const { ivaRate, pricesIncludeIva, cardFeePct, cardSharePct, paidPerFree, roundTo, fixedCosts } = req.body;
+  if (ivaRate !== undefined || pricesIncludeIva !== undefined) {
+    const current = await getTaxSettings(pool);
+    await saveTaxSettings(pool, { ivaRate: ivaRate ?? current.ivaRate, pricesIncludeIva: pricesIncludeIva ?? current.pricesIncludeIva });
+  }
+  await saveBusinessSettings(pool, { cardFeePct, cardSharePct, paidPerFree, roundTo, fixedCosts });
+  res.json({ success: true, settings: await readSettings() });
 });
 
 // Save recipe (admin-only)
