@@ -65,11 +65,11 @@ async function barra() {
   }
 
   app.innerHTML = pageHead('Barra', 'Órdenes en preparación', 'Se actualiza automáticamente cada 30 segundos') +
-    `<section class="grid">
-      <article class="glass-card"><p class="kpi-label">Pendientes</p><p class="kpi-value" id="barra-pending">0</p></article>
-      <article class="glass-card"><p class="kpi-label">Entregadas hoy</p><p class="kpi-value" id="barra-done">0</p></article>
-      <article class="glass-card"><p class="kpi-label">Hora</p><p class="kpi-value" id="barra-clock">--:--</p></article>
-      <article class="glass-card"><p class="kpi-label">Actualizar</p><button type="button" class="button" data-refresh>Actualizar</button></article>
+    `<section class="status-strip" aria-label="Estado de la barra">
+      <p class="status-strip-item"><span class="status-strip-value" id="barra-pending">0</span> pendientes</p>
+      <p class="status-strip-item"><span class="status-strip-value" id="barra-done">0</span> entregadas hoy</p>
+      <p class="status-strip-item"><span class="status-strip-value" id="barra-clock">--:--</span></p>
+      <button type="button" class="button" data-refresh>Actualizar</button>
     </section>
     <section class="panel"><div id="barra-grid" class="orders-board">${loading}</div></section>`;
 

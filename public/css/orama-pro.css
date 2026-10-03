@@ -195,3 +195,7 @@ main{position:relative;z-index:1}
 .scale-recipe{display:inline-flex;align-items:center;gap:var(--space-2);margin-left:var(--space-3);flex-wrap:wrap}
 .scale-recipe input{width:90px;min-height:44px;padding:var(--space-2) var(--space-3);border:1px solid var(--espresso);border-radius:5px;background:var(--base);color:var(--cream)}
 .recipe-row{display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--espresso)}
+.status-strip{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3) var(--space-5);margin-bottom:var(--space-4);padding:var(--space-3) var(--space-4);background:rgba(26,22,20,.7);border:1px solid rgba(61,43,31,.3)}
+.status-strip-item{margin:0;color:var(--muted);font-size:14px}
+.status-strip-value{margin-right:4px;color:var(--cream);font:600 22px/1 var(--mono);font-variant-numeric:tabular-nums}
+.status-strip .button{margin-left:auto}
