@@ -125,3 +125,23 @@ test('production without a passcode refuses to start', () => {
   assert.throws(() => createGate({ passcode: '', isProduction: true }), /GATE_PASSCODE/);
   assert.equal(typeof createGate({ passcode: '', isProduction: false }), 'function');
 });
+
+test('requests with no credentials are challenged but never counted as failed attempts', () => {
+  let time = 0;
+  const gate = createGate({ passcode: 'pw', maxFailures: 3, windowMs: 1000, now: () => time });
+  const run = (header) => {
+    const res = { code: null, headers: {}, set(k, v) { this.headers[k] = v; return this; }, status(c) { this.code = c; return this; }, json() { return this; }, send() { return this; } };
+    let nexted = false;
+    gate({ method: 'GET', path: '/x', originalUrl: '/x', ip: '2.2.2.2', headers: header === undefined ? {} : { authorization: header } }, res, () => { nexted = true; });
+    return { res, nexted };
+  };
+  // A phone opening the app also fetches favicons and touch icons before the passcode is typed.
+  for (let i = 0; i < 40; i += 1) {
+    const { res } = run(undefined);
+    assert.equal(res.code, 401, 'a missing passcode is a challenge, not a lockout');
+    assert.match(res.headers['WWW-Authenticate'], /^Basic/);
+  }
+  assert.equal(run(basic('pw')).nexted, true, 'the real passcode still works right after');
+  for (let i = 0; i < 3; i += 1) assert.equal(run(basic('wrong')).res.code, 401);
+  assert.equal(run(basic('wrong')).res.code, 429, 'wrong passcodes are still throttled');
+});
