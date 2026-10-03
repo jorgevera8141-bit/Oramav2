@@ -59,7 +59,7 @@ async function inventario() {
     closeAnyModal();
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
+    overlay.innerHTML = `<div class="orama-modal" role="dialog" aria-modal="true">
       <p class="orama-modal-message">Editar insumo</p>
       <div class="filters">${inventarioFieldsMarkup(item, 'modal-inv')}</div>
       <div class="orama-modal-actions">

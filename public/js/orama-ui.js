@@ -23,7 +23,7 @@
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.className = 'orama-overlay';
-      overlay.innerHTML = `<div class="orama-modal" role="${input ? 'none' : 'alertdialog'}" aria-modal="true">` +
+      overlay.innerHTML = `<div class="orama-modal" role="${input ? 'dialog' : 'alertdialog'}" aria-modal="true">` +
         `<p class="orama-modal-message">${escapeHtml(message)}</p>` +
         (input ? `<input type="text" class="search orama-modal-input" placeholder="${escapeHtml(input.placeholder || '')}" value="${escapeHtml(input.value || '')}">` : '') +
         `<div class="orama-modal-actions">` +
@@ -45,6 +45,25 @@
       document.addEventListener('keydown', onKey);
     });
   }
+
+  // Every modal is an `.orama-modal` inside an overlay. Name it from its first message line so
+  // screen readers announce a titled dialog, without each template repeating an id. A modal
+  // that sets its own aria-label (payment, invoice, split) is left alone.
+  let modalCount = 0;
+  function labelDialog(modal) {
+    if (modal.hasAttribute('aria-label') || modal.hasAttribute('aria-labelledby')) return;
+    const title = modal.querySelector('.orama-modal-message');
+    if (!title) return;
+    modalCount += 1;
+    if (!title.id) title.id = `orama-modal-title-${modalCount}`;
+    modal.setAttribute('aria-labelledby', title.id);
+  }
+  new MutationObserver((records) => {
+    records.forEach((record) => record.addedNodes.forEach((node) => {
+      if (node.nodeType !== 1) return;
+      (node.matches('.orama-modal') ? [node] : [...node.querySelectorAll('.orama-modal')]).forEach(labelDialog);
+    }));
+  }).observe(document.body, { childList: true, subtree: true });
 
   Orama.toast = toast;
   Orama.confirm = (message, options = {}) => dialog({ message, danger: !!options.danger, confirmText: options.okText || 'Confirmar', cancelText: options.cancelText || 'Cancelar' });

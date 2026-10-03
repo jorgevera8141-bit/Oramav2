@@ -25,12 +25,12 @@ async function nuevaOrden() {
       ? pricing.promociones_aplicadas.map((promo) => `<div class="cart-item-row promo-row"><span class="cart-item-name">Promo ${escapeHtml(promo.nombre)}</span><span class="cart-item-price">-${money.format(promo.descuento)}</span></div>`).join('')
       : '';
     return `<div class="cart-bar-inner">
-      <div class="cart-summary" data-cart-toggle>
+      <div class="cart-summary" data-cart-toggle role="button" tabindex="0" aria-expanded="${state.cartOpen}" aria-controls="cart-items">
         <span class="cart-summary-count">${count} artículo${count === 1 ? '' : 's'}</span>
         <span class="cart-summary-total">${money.format(total)}</span>
         <span class="cart-summary-toggle">${state.cartOpen ? 'Ocultar ▾' : 'Ver ▴'}</span>
       </div>
-      <div class="cart-items ${state.cartOpen ? 'open' : ''}"><div class="cart-items-inner">${state.cart.length ? state.cart.map((line) => `<div class="cart-item-row"><span class="cart-item-name">${escapeHtml(line.item_nombre)}</span><span class="cart-item-qty">x${line.cantidad}</span><span class="cart-item-price">${money.format(line.precio * line.cantidad)}</span><button type="button" class="button danger" data-remove-id="${line.id}" aria-label="Quitar ${escapeHtml(line.item_nombre)}">−</button></div>`).join('') : '<p class="subtle">Carrito vacío</p>'}${promoRows}</div></div>
+      <div id="cart-items" class="cart-items ${state.cartOpen ? 'open' : ''}"><div class="cart-items-inner">${state.cart.length ? state.cart.map((line) => `<div class="cart-item-row"><span class="cart-item-name">${escapeHtml(line.item_nombre)}</span><span class="cart-item-qty">x${line.cantidad}</span><span class="cart-item-price">${money.format(line.precio * line.cantidad)}</span><button type="button" class="button danger" data-remove-id="${line.id}" aria-label="Quitar ${escapeHtml(line.item_nombre)}">−</button></div>`).join('') : '<p class="subtle">Carrito vacío</p>'}${promoRows}</div></div>
       <div class="cart-actions">
         <button type="button" class="button" data-change-mesa>Cambiar mesa</button>
         <button type="button" class="button" data-submit-order ${state.cart.length ? '' : 'disabled'}>Ordenar</button>
@@ -38,6 +38,13 @@ async function nuevaOrden() {
     </div>`;
   }
 
+  // The cart bar re-renders its own HTML, so focus is put back on the new toggle after a keyboard toggle.
+  function toggleCart() {
+    state.cartOpen = !state.cartOpen;
+    refreshCart();
+    const toggle = document.querySelector('[data-cart-toggle]');
+    if (toggle) toggle.focus();
+  }
   function refreshCart() { const el = document.getElementById('cart-bar-root'); if (el) el.innerHTML = cartMarkup(); }
   function refreshItems() { const el = document.getElementById('cart-menu-items'); if (el) el.innerHTML = menuItemsMarkup(); }
   function refreshCategories() { document.querySelectorAll('[data-category]').forEach((button) => button.classList.toggle('active', button.dataset.category === state.category)); }
@@ -134,7 +141,7 @@ async function nuevaOrden() {
     if (removeButton) { removeFromCart(Number(removeButton.dataset.removeId)); return; }
 
     const cartToggle = event.target.closest('[data-cart-toggle]');
-    if (cartToggle) { state.cartOpen = !state.cartOpen; refreshCart(); return; }
+    if (cartToggle) { toggleCart(); return; }
 
     const changeMesa = event.target.closest('[data-change-mesa]');
     if (changeMesa) { state.mesa = null; state.cart = []; state.cartOpen = false; state.pricing = null; renderMesaStep(); return; }
@@ -143,9 +150,17 @@ async function nuevaOrden() {
     if (submitButton && !submitButton.disabled) submitOrder(submitButton);
   }
 
+  function onAppKeydown(event) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (!event.target.closest('[data-cart-toggle]')) return;
+    event.preventDefault();
+    toggleCart();
+  }
+
   renderMesaStep();
   app.addEventListener('click', onAppClick);
-  return () => { clearTimeout(previewTimer); app.removeEventListener('click', onAppClick); };
+  app.addEventListener('keydown', onAppKeydown);
+  return () => { clearTimeout(previewTimer); app.removeEventListener('click', onAppClick); app.removeEventListener('keydown', onAppKeydown); };
 }
 
 Orama.routes['nueva-orden'] = nuevaOrden;

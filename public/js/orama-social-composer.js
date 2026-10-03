@@ -72,7 +72,7 @@
 
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = `<div class="orama-modal split-view social-composer" role="none" aria-modal="true">
+    overlay.innerHTML = `<div class="orama-modal split-view social-composer" role="dialog" aria-modal="true">
       <p class="orama-modal-message">${existingPost ? 'Editar publicación' : 'Crear publicación'} · ${escapeHtml(promo?.nombre || '')}</p>
       <div class="sc-grid">
         <div class="sc-form">

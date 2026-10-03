@@ -267,7 +267,7 @@ async function promociones() {
     closeAnyModal();
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = `<div class="orama-modal split-view" role="none" aria-modal="true">
+    overlay.innerHTML = `<div class="orama-modal split-view" role="dialog" aria-modal="true">
       <p class="orama-modal-message">${promo ? 'Editar promoción' : 'Crear Promo del Día'}</p>
       <div class="filters">${promoFieldsMarkup(promo || {}, menuItems, staffList, 'modal-promo')}</div>
       <div class="orama-modal-actions">
@@ -309,7 +309,7 @@ async function promociones() {
       const options = (restrictTo ? staffList.filter((s) => s.tipo === restrictTo) : staffList);
       const overlay = document.createElement('div');
       overlay.className = 'orama-overlay';
-      overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
+      overlay.innerHTML = `<div class="orama-modal" role="dialog" aria-modal="true">
         <p class="orama-modal-message">${escapeHtml(title)}</p>
         <div class="field-group"><label for="pin-actor-nombre">Tu nombre</label>
           <select class="search" id="pin-actor-nombre">${options.map((s) => `<option value="${escapeHtml(s.nombre)}">${escapeHtml(s.nombre)}</option>`).join('')}</select>
@@ -340,7 +340,7 @@ async function promociones() {
     closeAnyModal();
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = `<div class="orama-modal split-view" role="none" aria-modal="true">
+    overlay.innerHTML = `<div class="orama-modal split-view" role="dialog" aria-modal="true">
       <p class="orama-modal-message">Revisar promoción</p>
       <div class="promo-review-detail">
         <h3>${escapeHtml(promo.nombre)}</h3>
@@ -402,7 +402,7 @@ async function promociones() {
     closeAnyModal();
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = `<div class="orama-modal split-view" role="none" aria-modal="true">
+    overlay.innerHTML = `<div class="orama-modal split-view" role="dialog" aria-modal="true">
       <p class="orama-modal-message">Revisar publicación</p>
       <div class="promo-review-detail">
         <h3>${escapeHtml(post.titular || '(sin titular)')}</h3>

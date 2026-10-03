@@ -49,7 +49,7 @@ async function menu() {
     closeAnyModal();
     const overlay = document.createElement('div');
     overlay.className = 'orama-overlay';
-    overlay.innerHTML = `<div class="orama-modal" role="none" aria-modal="true">
+    overlay.innerHTML = `<div class="orama-modal" role="dialog" aria-modal="true">
       <p class="orama-modal-message">Editar producto</p>
       <div class="filters">${menuFieldsMarkup(item, 'modal-menu')}</div>
       <div class="orama-modal-actions">
