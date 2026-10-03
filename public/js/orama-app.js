@@ -103,7 +103,8 @@ async function dashboard() {
     'Control de hoy',
     'Resumen',
     new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }),
-    '/images/cafe-ambiance.jpg'
+    '/images/cafe-ambiance.jpg',
+    '<a class="button primary" href="#nueva-orden">Nueva orden</a>'
   ) + `<section class="grid"><article class="glass-card"><p class="kpi-label">Ventas hoy</p><p class="kpi-value">${money.format(closed.reduce((sum, order) => sum + Number(order.total || 0), 0))}</p></article><article class="glass-card"><p class="kpi-label">Efectivo</p><p class="kpi-value">${money.format(cash)}</p></article><article class="glass-card"><p class="kpi-label">Tarjeta</p><p class="kpi-value">${money.format(card)}</p></article><article class="glass-card kpi-card warn"><p class="kpi-label">Inventario bajo</p><p class="kpi-value">${inventoryData.count || 0}</p></article></section><section class="panel"><div class="panel-head"><h2>Órdenes abiertas</h2><span class="subtle">${open.length} activas</span></div>${orderTable(open)}</section>`;
 }
 
