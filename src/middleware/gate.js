@@ -36,6 +36,11 @@ function suppliedPasscode(header) {
   return separator === -1 ? null : decoded.slice(separator + 1);
 }
 
+function challenge(res) {
+  res.set('WWW-Authenticate', 'Basic realm="Orama", charset="UTF-8"');
+  return res.status(401).json({ success: false, message: 'Se requiere el código de acceso.' });
+}
+
 function createGate({ passcode, previous, isProduction = false, maxFailures = MAX_FAILURES, windowMs = FAILURE_WINDOW_MS, now = Date.now }) {
   if (!passcode) {
     if (isProduction) throw new Error('GATE_PASSCODE must be set in production');
@@ -65,10 +70,14 @@ function createGate({ passcode, previous, isProduction = false, maxFailures = MA
     const supplied = suppliedPasscode(req.headers.authorization);
     if (supplied !== null && accepted.some((candidate) => matchesPasscode(supplied, candidate))) return next();
 
+    // No passcode at all is just the browser's first request, before it has shown the prompt, or a
+    // favicon / touch-icon fetch. Only a wrong passcode counts as a failed attempt, otherwise a
+    // few devices opening the app behind the café's one public address would lock everyone out.
+    if (supplied === null) return challenge(res);
+
     const current = entry && entry.resetAt > currentTime ? entry : { count: 0, resetAt: currentTime + windowMs };
     failures.set(key, { count: current.count + 1, resetAt: current.resetAt });
-    res.set('WWW-Authenticate', 'Basic realm="Orama", charset="UTF-8"');
-    return res.status(401).json({ success: false, message: 'Se requiere el código de acceso.' });
+    return challenge(res);
   };
 }
 
