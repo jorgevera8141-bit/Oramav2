@@ -79,30 +79,57 @@ async function resolveIngredientsCost(ingredients, db = pool) {
   return total;
 }
 
+const QUANTITY_DECIMALS = 6;
+
 /**
- * Save a recipe for a menu item
+ * Turns the calculator's ingredient lines into recipe_items rows. Inventory counts stock in its own unit
+ * and the sale deducts quantity_used from it, so the quantity is converted to that unit (18 g of coffee
+ * kept in kg is 0.018). Waste is stored as what is really consumed (100 g usable at 80% yield uses 125 g),
+ * so the recipe's cost and the stock deduction both include it. Two lines for the same item are added up.
+ */
+async function toRecipeRows(ingredients, loadItem) {
+  const totals = new Map();
+  for (const line of ingredients) {
+    const item = await loadItem(line.inventoryItemId);
+    if (!item) {
+      throw Object.assign(new Error(`El insumo #${line.inventoryItemId} no existe en el inventario.`), { statusCode: 400 });
+    }
+    const yieldPct = line.yieldPct === undefined ? 100 : Number(line.yieldPct);
+    if (!(yieldPct > 0 && yieldPct <= 100)) {
+      throw Object.assign(new Error(`El rendimiento de ${item.name} debe estar entre 1 y 100%.`), { statusCode: 400 });
+    }
+    const inItemUnit = convertQuantity(line.quantityUsed, line.unit || item.unit, item.unit);
+    totals.set(line.inventoryItemId, (totals.get(line.inventoryItemId) || 0) + inItemUnit / (yieldPct / 100));
+  }
+  return [...totals].map(([inventoryItemId, quantity]) => ({ inventoryItemId, quantityUsed: Number(quantity.toFixed(QUANTITY_DECIMALS)) }));
+}
+
+/**
+ * Save a recipe for a menu item: its ingredients (replacing the old ones) and the per-serving costs that
+ * are not ingredients (packaging, labour, other), which the margins report adds to the ingredient cost.
  */
 async function saveRecipe(recipeData) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    // Delete existing recipe for this menu item
-    await client.query(
-      'DELETE FROM recipe_items WHERE menu_item_id = $1',
-      [recipeData.menuItemId]
-    );
-    
-    // Insert new recipe ingredients
-    for (const ingredient of recipeData.ingredients) {
+    const rows = await toRecipeRows(recipeData.ingredients, (id) => getInventoryItemById(id, client));
+
+    await client.query('DELETE FROM recipe_items WHERE menu_item_id = $1', [recipeData.menuItemId]);
+    for (const row of rows) {
       await client.query(
         'INSERT INTO recipe_items (menu_item_id, inventory_item_id, quantity_used) VALUES ($1, $2, $3)',
-        [recipeData.menuItemId, ingredient.inventoryItemId, ingredient.quantityUsed]
+        [recipeData.menuItemId, row.inventoryItemId, row.quantityUsed]
       );
     }
-    
+    const { packaging = 0, labor = 0, other = 0 } = recipeData.extraCosts || {};
+    await client.query(
+      `INSERT INTO menu_item_costs (menu_item_id, packaging, labor, other, updated_at) VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (menu_item_id) DO UPDATE SET packaging = $2, labor = $3, other = $4, updated_at = NOW()`,
+      [recipeData.menuItemId, packaging, labor, other]
+    );
+
     await client.query('COMMIT');
-    return { success: true };
+    return { success: true, ingredients: rows.length };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -112,15 +139,29 @@ async function saveRecipe(recipeData) {
 }
 
 /**
- * Get the current recipe for a menu item
+ * The saved recipe of a menu item: its ingredients (in inventory units) and its extra costs.
  */
 async function getCurrentRecipe(menuItemId) {
   const { rows } = await pool.query(
     `SELECT ri.inventory_item_id, ri.quantity_used, ii.name, ii.unit, ii.cost_per_unit AS unit_cost
      FROM recipe_items ri
      JOIN inventory_items ii ON ri.inventory_item_id = ii.id
-     WHERE ri.menu_item_id = $1`,
+     WHERE ri.menu_item_id = $1
+     ORDER BY ii.name`,
     [menuItemId]
+  );
+  const { rows: [extras] } = await pool.query('SELECT packaging, labor, other FROM menu_item_costs WHERE menu_item_id = $1', [menuItemId]);
+  return { ingredients: rows, extraCosts: extras || { packaging: 0, labor: 0, other: 0 } };
+}
+
+/**
+ * Menu items that have a recipe, with the number of ingredients, for the "saved recipes" list.
+ */
+async function listRecipes() {
+  const { rows } = await pool.query(
+    `SELECT mi.id, mi.nombre, mi.categoria, mi.precio, COUNT(ri.id)::int AS ingredientes
+     FROM menu_items mi JOIN recipe_items ri ON ri.menu_item_id = mi.id
+     GROUP BY mi.id ORDER BY mi.nombre`
   );
   return rows;
 }
@@ -131,6 +172,8 @@ module.exports = {
   getInventoryItemById,
   searchInventoryItems,
   resolveIngredientsCost,
+  toRecipeRows,
   saveRecipe,
-  getCurrentRecipe
+  getCurrentRecipe,
+  listRecipes
 };

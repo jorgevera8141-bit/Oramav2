@@ -101,17 +101,18 @@ const businessSettingsSchema = z.object({
 
 const settingsSchema = taxSettingsSchema.partial().and(businessSettingsSchema);
 
-// Recipe save schema
+// Recipe save schema: ingredients are inventory items (quantity in `unit`, converted to the inventory's own
+// unit when stored) and the per-serving costs that are not ingredients.
 const recipeSaveSchema = z.object({
   menuItemId: z.number().int().positive(),
-  recipeName: z.string(),
+  recipeName: z.string().optional(),
   ingredients: z.array(z.object({
     inventoryItemId: z.number().int().positive(),
-    quantityUsed: z.number().positive()
-  })),
-  extraCosts: extraCostsSchema,
-  targetMargin: z.number().min(0).lt(100, 'El margen objetivo debe ser menor a 100%.'),
-  includeIVA: z.boolean()
+    quantityUsed: z.number().positive(),
+    unit: z.string().optional(),
+    yieldPct: z.number().optional()
+  })).min(1, 'La receta necesita al menos un insumo.'),
+  extraCosts: extraCostsSchema
 });
 
 module.exports = {
