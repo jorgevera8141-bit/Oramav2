@@ -192,3 +192,6 @@ main{position:relative;z-index:1}
 #calculator-tab .results-grid .alert .price-label{color:var(--amber)}
 #calculator-tab .results-grid .success .price-label{color:var(--teal)}
 #calculator-tab .mt-4{margin-top:var(--space-5)}
+.scale-recipe{display:inline-flex;align-items:center;gap:var(--space-2);margin-left:var(--space-3);flex-wrap:wrap}
+.scale-recipe input{width:90px;min-height:44px;padding:var(--space-2) var(--space-3);border:1px solid var(--espresso);border-radius:5px;background:var(--base);color:var(--cream)}
+.recipe-row{display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--espresso)}
