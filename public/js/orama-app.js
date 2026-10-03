@@ -485,6 +485,18 @@ async function staff() {
   };
 }
 
+// Managers-only screens check the PIN on entry: a name alone proves nothing.
+async function confirmManager({ nombre, pin }) {
+  try {
+    await api('/api/access/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actor_nombre: nombre, actor_pin: pin }) });
+    return true;
+  } catch (error) {
+    Orama.toast(error.message, 'error');
+    window.location.hash = '#dashboard';
+    return false;
+  }
+}
+
 async function nomina() {
   // Check if user is management via PIN
   const auth = await promptForStaffPin({ title: 'Acceso a Nómina', subtitle: 'Solo para gerentes' });
@@ -504,16 +516,17 @@ async function nomina() {
       app.innerHTML = pageHead('Nómina', 'Gestión de tiempo y pagos', 'Tu marcación de entrada y salida', '/images/cafe-ambiance.jpg') + '<section class="panel" id="nomina-self"></section>';
       return await marcarSelfCard(document.getElementById('nomina-self'), { nombre, pin });
     }
+    if (!(await confirmManager(auth))) return;
 
     // Load nomina interface
     app.innerHTML = pageHead('Nómina', 'Gestión de tiempo y pagos', 'Control de asistencia y cálculo de pagos', '/images/cafe-ambiance.jpg');
 
-    // Get all staff for the interface
-    const staffResponse = await api('/api/staff');
+    // Get all staff for the interface (rates are included only for a verified manager)
+    const staffResponse = await api('/api/staff', { headers: managerHeaders(auth) });
     const staffList = staffResponse.staff || [];
 
     // Get weekly payroll data
-    const payrollResponse = await api('/api/staff/payroll/weekly');
+    const payrollResponse = await api('/api/staff/payroll/weekly', { headers: managerHeaders(auth) });
     const payrollData = payrollResponse.payroll || [];
 
     app.innerHTML += `
@@ -918,7 +931,7 @@ async function loadCorregirTab(nombre, pin) {
   if (!tbody) return;
 
   try {
-    const response = await api('/api/staff/time-clock/recent');
+    const response = await api('/api/staff/time-clock/recent', { headers: managerHeaders({ nombre, pin }) });
     const entries = response.entries || [];
 
     if (entries.length === 0) {
@@ -1011,6 +1024,7 @@ async function pricing() {
       Orama.toast('Acceso denegado: solo gerentes', 'error');
       return;
     }
+    if (!(await confirmManager(auth))) return;
 
     // Load pricing interface
     app.innerHTML = pageHead('Calculadora de Precios', 'Análisis de costos y márgenes', 'Calcula el costo de producción y sugiere precios de venta', '/images/cafe-ambiance.jpg') +
@@ -1146,7 +1160,7 @@ async function pricing() {
 
     // Load staff hourly rates for the labor rate picker
     try {
-      const staffResponse = await api('/api/staff');
+      const staffResponse = await api('/api/staff', { headers: managerHeaders(auth) });
       const laborStaffSelect = document.getElementById('laborStaffSelect');
       (staffResponse.staff || []).filter((s) => s.activo).forEach((s) => {
         const option = document.createElement('option');
