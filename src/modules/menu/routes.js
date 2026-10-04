@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../../config/database');
 const { validate, numericIdParam } = require('../../middleware/validate');
 const { createMenuItemSchema, updateMenuItemSchema } = require('./schemas');
+const { nextClave } = require('./clave');
 
 const router = express.Router();
 router.param('id', numericIdParam);
@@ -11,8 +12,22 @@ router.get('/menu', async (_req, res) => {
   res.json({ success: true, menu: rows });
 });
 
+// The clave a new product would get, from the claves already in use (see ./clave.js).
+async function suggestClave(nombre, categoria) {
+  const { rows } = await pool.query('SELECT categoria, clave FROM menu_items');
+  return nextClave({ nombre, categoria }, rows);
+}
+
+router.get('/menu/siguiente-clave', async (req, res) => {
+  const nombre = String(req.query.nombre || '').slice(0, 120);
+  const categoria = String(req.query.categoria || '').slice(0, 80);
+  res.json({ success: true, clave: await suggestClave(nombre, categoria) });
+});
+
 router.post('/menu/nuevo', validate(createMenuItemSchema), async (req, res) => {
-  const data = req.body;
+  const data = { ...req.body };
+  // Left blank, the clave follows the pattern of the existing ones.
+  if (!data.clave) data.clave = await suggestClave(data.nombre, data.categoria);
   const { rows } = await pool.query(
     'INSERT INTO menu_items (nombre, categoria, precio, activo, clave, clave_sat) VALUES ($1, $2, $3, COALESCE($4, 1), COALESCE($5, \'\'), COALESCE($6, \'\')) RETURNING *',
     [data.nombre, data.categoria, data.precio, data.activo, data.clave, data.clave_sat]
