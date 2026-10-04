@@ -3,6 +3,7 @@ const pool = require('../../config/database');
 const { validate, numericIdParam } = require('../../middleware/validate');
 const { createMenuItemSchema, updateMenuItemSchema } = require('./schemas');
 const { nextClave } = require('./clave');
+const { deleteMenuItem } = require('./service');
 
 const router = express.Router();
 router.param('id', numericIdParam);
@@ -55,9 +56,8 @@ router.put('/menu/:id', validate(updateMenuItemSchema), async (req, res) => {
 });
 
 router.delete('/menu/:id', async (req, res) => {
-  const id = Number(req.params.id);
-  await pool.query('DELETE FROM menu_items WHERE id = $1', [id]);
-  res.status(204).end();
+  await deleteMenuItem(pool, Number(req.params.id));
+  res.json({ success: true });
 });
 
 module.exports = router;
