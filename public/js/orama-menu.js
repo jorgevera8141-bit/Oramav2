@@ -2,9 +2,9 @@ function menuFieldsMarkup(item = {}, prefix = 'menu') {
   const isActive = item.activo === undefined || Number(item.activo) === 1;
   return `
     <div class="field-group" style="margin-bottom:0"><label for="${prefix}-nombre">Producto</label><input class="search" id="${prefix}-nombre" type="text" maxlength="120" value="${escapeHtml(item.nombre || '')}" required></div>
-    <div class="field-group" style="margin-bottom:0"><label for="${prefix}-categoria">Categoría</label><input class="search" id="${prefix}-categoria" type="text" maxlength="80" value="${escapeHtml(item.categoria || '')}" required></div>
+    <div class="field-group" style="margin-bottom:0"><label for="${prefix}-categoria">Categoría</label><input class="search" id="${prefix}-categoria" type="text" maxlength="80" value="${escapeHtml(item.categoria || '')}" ${prefix === 'new-menu' ? 'list="menu-categories"' : ''} required></div>
     <div class="field-group" style="margin-bottom:0"><label for="${prefix}-precio">Precio</label><input class="search" id="${prefix}-precio" type="number" min="0" step="0.01" value="${Number(item.precio || 0)}" required></div>
-    <div class="field-group" style="margin-bottom:0"><label for="${prefix}-clave">Clave</label><input class="search" id="${prefix}-clave" type="text" maxlength="40" value="${escapeHtml(item.clave || '')}"></div>
+    <div class="field-group" style="margin-bottom:0"><label for="${prefix}-clave">Clave</label><input class="search" id="${prefix}-clave" type="text" maxlength="40" value="${escapeHtml(item.clave || '')}" ${prefix === 'new-menu' ? 'placeholder="Automática"' : ''}></div>
     <div class="field-group" style="margin-bottom:0"><label for="${prefix}-activo">Estado</label><select class="search" id="${prefix}-activo"><option value="1" ${isActive ? 'selected' : ''}>Activo</option><option value="0" ${!isActive ? 'selected' : ''}>Inactivo</option></select></div>`;
 }
 
@@ -102,8 +102,8 @@ async function menu() {
     const payload = readMenuFields('new-menu');
     if (!payload.nombre || !payload.categoria) { Orama.toast('Nombre y categoría son requeridos', 'error'); return; }
     try {
-      await api('/api/menu/nuevo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      Orama.toast('Producto agregado', 'success');
+      const created = await api('/api/menu/nuevo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      Orama.toast(`Producto agregado · clave ${created.item.clave}`, 'success');
       await window.render();
     } catch (error) {
       Orama.toast(error.message, 'error');
@@ -115,6 +115,7 @@ async function menu() {
       <div class="panel-head"><h2>Agregar producto</h2></div>
       <form id="menu-form" class="filters">
         ${menuFieldsMarkup({}, 'new-menu')}
+        <datalist id="menu-categories">${categories.filter((category) => category !== 'Todos').map((category) => `<option value="${escapeHtml(category)}"></option>`).join('')}</datalist>
         <button type="submit" class="button" style="align-self:flex-end">Agregar</button>
       </form>
     </section>
@@ -142,10 +143,31 @@ async function menu() {
   }));
   document.getElementById('menu-search').addEventListener('input', filterRender);
 
+  // Blank clave means automatic: show the one the product would get as soon as its name or category is typed.
+  let claveTimer = null;
+  const showSuggestedClave = () => {
+    clearTimeout(claveTimer);
+    claveTimer = setTimeout(async () => {
+      const nombre = document.getElementById('new-menu-nombre');
+      const categoria = document.getElementById('new-menu-categoria');
+      const clave = document.getElementById('new-menu-clave');
+      if (!nombre || !categoria || !clave || !nombre.value.trim() || !categoria.value.trim()) return;
+      try {
+        const data = await api(`/api/menu/siguiente-clave?nombre=${encodeURIComponent(nombre.value.trim())}&categoria=${encodeURIComponent(categoria.value.trim())}`);
+        clave.placeholder = `Automática: ${data.clave}`;
+      } catch (error) {
+        console.error(error);
+      }
+    }, 300);
+  };
+  document.getElementById('new-menu-nombre').addEventListener('input', showSuggestedClave);
+  document.getElementById('new-menu-categoria').addEventListener('input', showSuggestedClave);
+
   app.addEventListener('click', onAppClick);
   app.addEventListener('submit', onAppSubmit);
 
   return () => {
+    clearTimeout(claveTimer);
     closeAnyModal();
     app.removeEventListener('click', onAppClick);
     app.removeEventListener('submit', onAppSubmit);
